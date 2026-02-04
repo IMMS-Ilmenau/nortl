@@ -20,7 +20,7 @@ jobs:
       contents: read
 
     # Only publish to PyPi on tag pushes
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.ref_type == 'tag'
 
     steps:
       - uses: actions/checkout@v6
