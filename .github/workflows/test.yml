@@ -1,0 +1,17 @@
+name: Run Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      - name: Install Icarus Verilog
+        run: |
+          sudo apt-get -y update
+          sudo apt-get -y install iverilog
+      - name: Run tox
+        run: uv run tox

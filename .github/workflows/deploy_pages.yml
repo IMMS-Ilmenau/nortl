@@ -1,0 +1,31 @@
+name: Build and deploy pages
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    name: Build and deploy pages
+    runs-on: ubuntu-latest
+
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      - name: Build Documentation
+        run: uv run mkdocs build --site-dir site --strict
+      - name: Upload to GitHub Pages
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4

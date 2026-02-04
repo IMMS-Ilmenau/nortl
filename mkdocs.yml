@@ -1,0 +1,178 @@
+# yaml-language-server: $schema=https://squidfunk.github.io/mkdocs-material/schema.json
+
+site_name: noRTL
+site_url: https://IMMS-Ilmenau.github.io/nortl
+
+# Navigation tree
+nav:
+  - Home:
+    - index.md
+  - User Guide:
+    - Installation: user_guide/installation.md
+    - Engine: user_guide/engine.md
+  - Code Reference: reference/
+  # TODO Add new sections to the documentation here
+
+# Project information
+repo_url: https://github.com/IMMS-Ilmenau/nortl
+repo_name: GitHub
+edit_uri: edit/main/docs/src/
+
+copyright: Copyright &copy; 2026 IMMS GmbH
+
+# Build directories
+theme:
+  name: material
+  logo: assets/logo.svg
+  palette:
+    # Palette toggle for automatic mode
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  features:
+    - announce.dismiss
+    - content.action.edit
+    - content.action.view
+    - content.code.annotate
+    - content.code.copy
+    - content.tooltips
+    - header.autohide
+    - navigation.footer
+    - navigation.indexes
+    - navigation.instant
+    - navigation.instant.progress
+    - navigation.prune
+    - navigation.tabs
+    - navigation.top
+    - navigation.sections
+    - navigation.tracking
+    - search.highlight
+    - search.suggest
+    - search.share
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+
+docs_dir: docs/src
+site_dir: docs/site
+
+# Live Reloading
+watch:
+- src
+- docs/templates
+
+# Formatting options
+plugins:
+- search
+- gen-files:
+    scripts:
+    - docs/scripts/gen_ref_pages.py
+- literate-nav:
+    # Navigation file must not use .md ending, to hide it from search indexing
+    nav_file: summary.nav
+- mkdocstrings:
+    default_handler: python
+    enable_inventory: true
+    custom_templates: docs/templates
+    handlers:
+      python:
+        inventories:
+          # TODO Add intersphinx inventories for all relevant dependencies here
+          - https://docs.python.org/3/objects.inv
+          - https://typing-extensions.readthedocs.io/en/latest/objects.inv
+          - https://networkx.org/documentation/latest/objects.inv
+        paths: [src]
+        options:
+          docstring_options:
+            ignore_init_summary: true
+
+          show_bases: true
+          show_source: false
+          find_stubs_package: false
+
+          heading_level: 1
+          show_root_heading: true
+          show_root_full_path: true
+          show_symbol_type_heading: true
+          show_symbol_type_toc: true
+
+          # Members options
+          inherited_members: true
+          members_order: source
+          filters:
+            - "!^_[^_]"
+            - "!__all__"
+            - "!__slots__"
+            - "!logger"
+
+          # Docstring options
+          docstring_style: google
+          docstring_section_style: list
+          merge_init_into_class: true
+          show_if_no_docstring: false
+
+          # Signatures
+          annotations_path: brief
+          line_length: 80
+          show_signature_annotations: true
+          separate_signature: true
+          signature_crossrefs: true
+          unwrap_annotated: true
+
+          # Insider
+          summary: true
+          parameter_headings: true
+- caption: {}
+- markdown-exec:
+    ansi: required
+
+extra_css:
+- stylesheets/extra.css
+- stylesheets/mkdocstrings.css
+
+markdown_extensions:
+- attr_list
+- admonition
+- footnotes
+- md_in_html
+- pymdownx.details
+- pymdownx.emoji:
+    emoji_generator: !!python/name:material.extensions.emoji.to_svg
+    emoji_index: !!python/name:material.extensions.emoji.twemoji
+- pymdownx.highlight:
+    anchor_linenums: true
+    line_spans: __span
+    pygments_lang_class: true
+- pymdownx.inlinehilite
+- pymdownx.keys
+- pymdownx.snippets
+- pymdownx.superfences:
+    custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+- pymdownx.tabbed:
+    alternate_style: true
+- pymdownx.tasklist
+- tables
+- toc:
+    permalink: true
+- def_list

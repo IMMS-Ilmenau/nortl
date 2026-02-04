@@ -1,0 +1,15 @@
+{% extends "_base/module.html.jinja" %}
+
+{% block heading scoped %}
+    {% if config.show_symbol_type_heading %}<code class="doc-symbol doc-symbol-heading doc-symbol-module"></code>{% endif %}
+        {% if config.separate_signature %}
+            <span class="doc doc-object-name doc-module-name">
+            {% for part in module_name.split('.') -%}
+                {{ part -}}
+                {% if not loop.last %}.<wbr>{% endif %}
+            {% endfor %}
+            </span>
+        {% else %}
+            <code>{{ module_name }}</code>
+    {% endif %}
+{% endblock heading %}

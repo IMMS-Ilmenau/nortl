@@ -1,93 +1,89 @@
-# noRTL-public
+# noRTL - Hardware design beyond register transfer level
 
+**noRTL** (Not-only RTL) is a Python-based code generation framework for designing and implementing hardware description language (HDL) modules, particularly SystemVerilog state machines. It provides a high-level, Pythonic API for describing sets of finite state machines (FSMs) and hardware components with built-in correctness guarantees.
 
+**noRTL** aims to make the design of complex digital systems easier by reducing the shortcommings of current hardware description languages that use the register transfer level (RTL) to model digital circuit's behavior. This tool goes beyond this level of abstraction: We digital designers want to describe behavior with cycle-level accuracy but do not want do deal with the complexity of state naming, state coding, starting parallel processes, etc. **noRTL** realizes this tedious part of digital design inside its core.
 
-## Getting started
+The code that is written for **noRTL** is pure Python code. The **noRTL** package realizes state handling and data structure assembly for you while the Python code is executed. **noRTL** can be understood as a fancy generator that assembles state machines and provides the tooling to render it to SystemVerilog and tools for verifying your code.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## Main ideas
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+**noRTL** is built with the following concepts and ideas.
 
-## Add your files
-
-* [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
-```
-cd existing_repo
-git remote add origin https://gitlabe.imms.de/mygl/limbus2000/nortl-public.git
-git branch -M main
-git push -uf origin main
-```
-
-## Integrate with your tools
-
-* [Set up project integrations](https://gitlabe.imms.de/mygl/limbus2000/nortl-public/-/settings/integrations)
-
-## Collaborate with your team
-
-* [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+* Each hardware description is an executable Python program. The hardware structure is assembled during execution. There is no need for static code analysis or parsing.
+* There should be no need to declare states explicitely. The number of states is determined during execution of the code.
+* The behavior description should be easily readable and feel procedural. Control structures should work similar to Python equivalents.
+* Checks and Optimizations are to be done during runtime of the Python code. Post-Optimization has not been necessary (yet).
 
 ## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+A prerequisite for noRTL is the availablility of icarus Verilog in your path. This can be installed using your system's package manager or using the *oss-cad-suite* (https://github.com/YosysHQ/oss-cad-suite-build)
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+### Method 1: Using pip (Public Registry)
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+```bash
+# Install nortl
+pip install nortl
+```
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+### Method 2: Using uv (Recommended)
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+```bash
+# Clone the repository
+git clone https://github.com/IMMS-Ilmenau/nortl
+cd nortl
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+# Install dependencies
+uv sync
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+# Activate the virtual environment
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+```
 
-## License
-For open source projects, say how it is licensed.
+### Method 3: Development Installation
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+For development work, install in editable mode:
+
+```bash
+# Clone the repository
+git clone https://github.com/IMMS-Ilmenau/nortl
+cd nortl
+
+# Install development dependencies
+uv sync --all-extras
+
+# Activate the virtual environment
+source .venv/bin/activate
+```
+
+---
+
+## Your First State Machine
+
+Let's create a simple state machine that toggles an output based on an input.
+
+```python
+from nortl import Engine, Const
+
+# Create an engine with a module name -- Clock and reset signal is automatically included
+engine = Engine("my_first_engine")
+
+# Define input and output signals
+enable = engine.define_input("enable", width=1)
+output = engine.define_output("output", width=1, reset_value=0)
+
+# Don't define states -- define behavior!
+with engine.while_loop(Const(1)):
+    engine.wait_for(enable == 1)
+    engine.set(output, 1)
+    engine.sync() # Wait one clock cycle
+    engine.set(output, 0)
+    engine.wait_for(enable == 0)
+
+# Generate SystemVerilog code
+from nortl.renderer import VerilogRenderer
+renderer = VerilogRenderer()
+verilog_code = renderer.render(engine)
+
+print(verilog_code)
+```

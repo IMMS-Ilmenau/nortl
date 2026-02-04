@@ -1,0 +1,129 @@
+[project]
+name = "nortl"
+version = "1.4.0"
+description = "Not-only RTL."
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [
+    { name = "Florian Koegler", email = "florian.koegler@imms.de" },
+    { name = "Georg Glaeser", email = "georg.glaeser@imms.de" },
+]
+dependencies = [
+    # TODO Add dependencies here
+    "networkx>=3.4.2",
+    "more-itertools>=10.8.0"
+]
+
+[project.optional-dependencies]
+type-stubs = [
+    # TODO Add type stubs for dependencies here
+    "pytest-stub",
+    "types-networkx",
+]
+
+[project.urls]
+Homepage = "https://github.com/IMMS-Ilmenau/nortl"
+Documentation = "https://IMMS-Ilmenau.github.io/nortl"
+
+# Build System
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nortl"]
+
+# uv
+[tool.uv]
+required-version = ">=0.9.10"
+
+# Dependency groups
+[dependency-groups]
+dev = [
+    "nortl[type-stubs]",
+    # tox
+    "tox>=4.33.0",
+    "tox-uv>=1.29.0",
+    # Pytest
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+    # MkDocs
+    "mkdocs-material>=9.7.1",
+    "mkdocs-gen-files>=0.6.0",
+    "mkdocs-literate-nav>=0.6.2",
+    "mkdocs-section-index>=0.3.10",
+    "mkdocs-caption>=1.3.0",
+    "mkdocstrings>=1.0.0",
+    "mkdocstrings-python>=2.0.1",
+    "markdown-exec[ansi]>=1.12.1",
+    "black>=25.12.0",
+    "anybadge>=1.16.0",
+    # Static code checkers
+    "mypy>=1.19.1",
+    "ruff>=0.14.10",
+]
+
+# Coverage Configuration
+[tool.coverage.run]
+branch = true
+parallel = true
+relative_files = true
+
+[tool.coverage.paths]
+source = [
+    "src/",
+    ".tox/*/lib/*/site-packages/",
+    ".tox/*/lib/site-packages/",
+    "**/hatch/**/lib/*/site-packages/",
+]
+
+[tool.coverage.report]
+fail_under = 1
+exclude_also = [
+    "raise RuntimeError",
+    "@(typing\\.)?overload",
+    "Protocol",
+]
+
+[tool.coverage.xml]
+output = "reports/coverage.xml"
+
+[tool.coverage.html]
+directory = "reports/coverage"
+
+# Mypy Configuration
+[tool.mypy]
+python_version = "3.12"
+mypy_path = ["./src", "./stubs"]
+disallow_any_unimported = true
+disallow_any_expr = false
+disallow_any_decorated = false
+disallow_any_explicit = false
+disallow_any_generics = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+warn_unreachable = true
+implicit_reexport = false
+strict_equality = true
+
+# Ruff Configuration
+[tool.ruff]
+line-length = 150
+
+[tool.ruff.lint]
+pydocstyle.convention = "google"
+extend-select = ["W", "C90", "D", "I", "ERA", "PERF", "RUF", "N"]
+# Missing docstring warnings are partially disabled.
+# TODO You can remove the next line for more aggressive docstring rules.
+extend-ignore = ["D100", "D101", "D102", "D103", "D104", "D105", "D106", "D107", "D202"]
+
+[tool.ruff.format]
+quote-style = "single"
