@@ -87,3 +87,7 @@ verilog_code = renderer.render(engine)
 
 print(verilog_code)
 ```
+
+## Acknowledgement
+
+The DI-Meta-X project where this software has been developed is funded by the German Federal Ministry of Research, Technology and Space under the reference 16ME0976. Responsibility for the content of this publication lies with the author.
