@@ -7,7 +7,24 @@ The actual rendering (which decides how they are converted to Verilog) is decoup
 from abc import ABCMeta, abstractmethod
 from math import ceil, log2
 from types import GeneratorType
-from typing import Callable, Dict, Final, Generator, Iterable, Literal, Never, Optional, Protocol, Sequence, Set, Type, Union, overload
+from typing import (
+    Callable,
+    Dict,
+    Final,
+    Generator,
+    Generic,
+    Iterable,
+    Literal,
+    Never,
+    Optional,
+    Protocol,
+    Sequence,
+    Set,
+    Type,
+    TypeVar,
+    Union,
+    overload,
+)
 
 from nortl.core.protocols import ACCESS_CHECKS, Renderable
 from nortl.core.renderers.operations import (
@@ -28,10 +45,18 @@ from nortl.core.renderers.operations import (
     Or,
     Positive,
     RightShift,
+    SingleRenderer,
     Slice,
+    SliceRenderer,
     Substraction,
+    TwoSideRenderer,
     Unequality,
 )
+from nortl.core.renderers.operations import All as AllRenderer
+from nortl.core.renderers.operations import Any as AnyRenderer
+from nortl.core.renderers.operations import Concat as ConcatRenderer
+from nortl.core.renderers.operations import IfThenElse as IfThenElseRenderer
+from nortl.core.renderers.operations.base import SequenceRenderer, TernaryRenderer
 from nortl.utils.parse_utils import parse_int
 
 __all__ = [
@@ -46,6 +71,7 @@ __all__ = [
     'Var',
 ]
 
+T_Renderer = TypeVar('T_Renderer', bound='RendererProto')
 
 Operand = Union[Renderable, int, bool]
 
@@ -72,6 +98,11 @@ class OperationTrait(metaclass=ABCMeta):
 
     @property
     @abstractmethod
+    def is_constant(self) -> bool:
+        """Indicates if this object has a constant value."""
+
+    @property
+    @abstractmethod
     def operand_width(self) -> Optional[int]:
         """Indicates the width when used as an operand.
 
@@ -95,101 +126,101 @@ class OperationTrait(metaclass=ABCMeta):
 
     # Arithemtic Operations
     # TODO all two side operations loose the width
-    def __add__(self, value: Operand, /) -> 'TwoSideOperation':
-        return TwoSideOperation(left=self, right=value, renderer=Addition)
+    def __add__(self, value: Operand, /) -> Renderable:
+        return TwoSideOperation.create_or_fold_operation(left=self, right=value, renderer=Addition)
 
-    def __sub__(self, value: Operand, /) -> 'TwoSideOperation':
-        return TwoSideOperation(left=self, right=value, renderer=Substraction)
+    def __sub__(self, value: Operand, /) -> Renderable:
+        return TwoSideOperation.create_or_fold_operation(left=self, right=value, renderer=Substraction)
 
-    def __mul__(self, value: Operand, /) -> 'TwoSideOperation':
-        return TwoSideOperation(left=self, right=value, renderer=Multiplication)
+    def __mul__(self, value: Operand, /) -> Renderable:
+        return TwoSideOperation.create_or_fold_operation(left=self, right=value, renderer=Multiplication)
 
-    def __truediv__(self, value: Operand, /) -> 'TwoSideOperation':
-        return TwoSideOperation(left=self, right=value, renderer=Division)
+    def __truediv__(self, value: Operand, /) -> Renderable:
+        return TwoSideOperation.create_or_fold_operation(left=self, right=value, renderer=Division)
 
-    def __mod__(self, value: Operand, /) -> 'TwoSideOperation':
-        return TwoSideOperation(left=self, right=value, renderer=Modulo)
+    def __mod__(self, value: Operand, /) -> Renderable:
+        return TwoSideOperation.create_or_fold_operation(left=self, right=value, renderer=Modulo)
 
     # Arithmetic Operations (Right-Side)
-    def __radd__(self, value: Operand, /) -> 'TwoSideOperation':
-        return TwoSideOperation(left=value, right=self, renderer=Addition)
+    def __radd__(self, value: Operand, /) -> Renderable:
+        return TwoSideOperation.create_or_fold_operation(left=value, right=self, renderer=Addition)
 
-    def __rsub__(self, value: Operand, /) -> 'TwoSideOperation':
-        return TwoSideOperation(left=value, right=self, renderer=Substraction)
+    def __rsub__(self, value: Operand, /) -> Renderable:
+        return TwoSideOperation.create_or_fold_operation(left=value, right=self, renderer=Substraction)
 
-    def __rmul__(self, value: Operand, /) -> 'TwoSideOperation':
-        return TwoSideOperation(left=value, right=self, renderer=Multiplication)
+    def __rmul__(self, value: Operand, /) -> Renderable:
+        return TwoSideOperation.create_or_fold_operation(left=value, right=self, renderer=Multiplication)
 
-    def __rtruediv__(self, value: Operand, /) -> 'TwoSideOperation':
-        return TwoSideOperation(left=value, right=self, renderer=Division)
+    def __rtruediv__(self, value: Operand, /) -> Renderable:
+        return TwoSideOperation.create_or_fold_operation(left=value, right=self, renderer=Division)
 
-    def __rmod__(self, value: Operand, /) -> 'TwoSideOperation':
-        return TwoSideOperation(left=value, right=self, renderer=Modulo)
+    def __rmod__(self, value: Operand, /) -> Renderable:
+        return TwoSideOperation.create_or_fold_operation(left=value, right=self, renderer=Modulo)
 
     # Logic Operations
-    def __and__(self, value: Operand, /) -> 'TwoSideOperation':
-        return TwoSideOperation(left=self, right=value, renderer=And, width=greater_operand_width)
+    def __and__(self, value: Operand, /) -> Renderable:
+        return TwoSideOperation.create_or_fold_operation(left=self, right=value, renderer=And, width=greater_operand_width)
 
-    def __or__(self, value: Operand, /) -> 'TwoSideOperation':
-        return TwoSideOperation(left=self, right=value, renderer=Or, width=greater_operand_width)
+    def __or__(self, value: Operand, /) -> Renderable:
+        return TwoSideOperation.create_or_fold_operation(left=self, right=value, renderer=Or, width=greater_operand_width)
 
-    def __xor__(self, value: Operand, /) -> 'TwoSideOperation':
-        return TwoSideOperation(left=self, right=value, renderer=ExclusiveOr, width=greater_operand_width)
+    def __xor__(self, value: Operand, /) -> Renderable:
+        return TwoSideOperation.create_or_fold_operation(left=self, right=value, renderer=ExclusiveOr, width=greater_operand_width)
 
-    def __lshift__(self, value: Operand, /) -> 'TwoSideOperation':
-        return TwoSideOperation(left=self, right=value, renderer=LeftShift)
+    def __lshift__(self, value: Operand, /) -> Renderable:
+        return TwoSideOperation.create_or_fold_operation(left=self, right=value, renderer=LeftShift)
 
-    def __rshift__(self, value: Operand, /) -> 'TwoSideOperation':
-        return TwoSideOperation(left=self, right=value, renderer=RightShift)
+    def __rshift__(self, value: Operand, /) -> Renderable:
+        return TwoSideOperation.create_or_fold_operation(left=self, right=value, renderer=RightShift)
 
     # Logic Operations (Right Side)
-    def __rand__(self, value: Operand, /) -> 'TwoSideOperation':
-        return TwoSideOperation(left=value, right=self, renderer=And, width=greater_operand_width)
+    def __rand__(self, value: Operand, /) -> Renderable:
+        return TwoSideOperation.create_or_fold_operation(left=value, right=self, renderer=And, width=greater_operand_width)
 
-    def __ror__(self, value: Operand, /) -> 'TwoSideOperation':
-        return TwoSideOperation(left=value, right=self, renderer=Or, width=greater_operand_width)
+    def __ror__(self, value: Operand, /) -> Renderable:
+        return TwoSideOperation.create_or_fold_operation(left=value, right=self, renderer=Or, width=greater_operand_width)
 
-    def __rxor__(self, value: Operand, /) -> 'TwoSideOperation':
-        return TwoSideOperation(left=value, right=self, renderer=ExclusiveOr, width=greater_operand_width)
+    def __rxor__(self, value: Operand, /) -> Renderable:
+        return TwoSideOperation.create_or_fold_operation(left=value, right=self, renderer=ExclusiveOr, width=greater_operand_width)
 
-    def __rlshift__(self, value: Operand, /) -> 'TwoSideOperation':
-        return TwoSideOperation(left=value, right=self, renderer=LeftShift)
+    def __rlshift__(self, value: Operand, /) -> Renderable:
+        return TwoSideOperation.create_or_fold_operation(left=value, right=self, renderer=LeftShift)
 
-    def __rrshift__(self, value: Operand, /) -> 'TwoSideOperation':
-        return TwoSideOperation(left=value, right=self, renderer=RightShift)
+    def __rrshift__(self, value: Operand, /) -> Renderable:
+        return TwoSideOperation.create_or_fold_operation(left=value, right=self, renderer=RightShift)
 
     # Misc.
-    def __neg__(self) -> 'SingleOperation':
-        return SingleOperation(value=self, renderer=Negative)
+    def __neg__(self) -> Renderable:
+        return SingleOperation.create_or_fold_operation(value=self, renderer=Negative)
 
-    def __pos__(self) -> 'SingleOperation':
-        return SingleOperation(value=self, renderer=Positive)
+    def __pos__(self) -> 'Renderable':
+        return SingleOperation.create_or_fold_operation(value=self, renderer=Positive)
 
     # Inversion
-    def __invert__(self) -> 'SingleOperation':
-        return SingleOperation(value=self, renderer=Inversion)
+    def __invert__(self) -> Renderable:
+        return SingleOperation.create_or_fold_operation(value=self, renderer=Inversion)
 
     # Comparison
-    def __eq__(self, value: Operand, /) -> 'TwoSideOperation':  # type: ignore[override]
-        return TwoSideOperation(left=self, right=value, renderer=Equality, width=1)
+    def __eq__(self, value: Operand, /) -> Renderable:  # type: ignore[override]
+        return TwoSideOperation.create_or_fold_operation(left=self, right=value, renderer=Equality, width=1)
 
-    def __ne__(self, value: Operand, /) -> 'TwoSideOperation':  # type: ignore[override]
-        return TwoSideOperation(left=self, right=value, renderer=Unequality, width=1)
+    def __ne__(self, value: Operand, /) -> Renderable:  # type: ignore[override]
+        return TwoSideOperation.create_or_fold_operation(left=self, right=value, renderer=Unequality, width=1)
 
-    def __lt__(self, value: Operand, /) -> 'TwoSideOperation':
-        return TwoSideOperation(left=self, right=value, renderer=Less, width=1)
+    def __lt__(self, value: Operand, /) -> Renderable:
+        return TwoSideOperation.create_or_fold_operation(left=self, right=value, renderer=Less, width=1)
 
-    def __le__(self, value: Operand, /) -> 'TwoSideOperation':
-        return TwoSideOperation(left=self, right=value, renderer=LessOrEqual, width=1)
+    def __le__(self, value: Operand, /) -> Renderable:
+        return TwoSideOperation.create_or_fold_operation(left=self, right=value, renderer=LessOrEqual, width=1)
 
-    def __gt__(self, value: Operand, /) -> 'TwoSideOperation':
-        return TwoSideOperation(left=self, right=value, renderer=Greater, width=1)
+    def __gt__(self, value: Operand, /) -> Renderable:
+        return TwoSideOperation.create_or_fold_operation(left=self, right=value, renderer=Greater, width=1)
 
-    def __ge__(self, value: Operand, /) -> 'TwoSideOperation':
-        return TwoSideOperation(left=self, right=value, renderer=GreaterOrEqual, width=1)
+    def __ge__(self, value: Operand, /) -> Renderable:
+        return TwoSideOperation.create_or_fold_operation(left=self, right=value, renderer=GreaterOrEqual, width=1)
 
     # Bit Slicing
-    def __getitem__(self, index: Union[int, slice]) -> 'OperationTrait':
+    def __getitem__(self, index: Union[int, slice]) -> Renderable:
         return SliceOperation(value=self, index=index, renderer=Slice)
 
 
@@ -315,6 +346,8 @@ class Const(LiteralValue):
         `Const('0x00', 6)` will be parsed as value 0, width 6, due to explicit width. Alternatively, `Const(0, 6)` could be used.
     """
 
+    is_constant: Final = True
+
 
 class Var(LiteralValue):
     """Variable value, representing an integer.
@@ -327,9 +360,11 @@ class Var(LiteralValue):
         Variables allow lazily determining the final value for a "constant" in the resulting Verilog code.
         Internally, they are used to define the width of the scratch pad signal for the [ScratchManager][nortl.core.manager.scratch_manager.ScratchManager], allowing the scratch manager to increase it over time.
 
-        Variables can be used in all places, that accept Renderabls, but must be used carefully.
+        Variables can be used in all places, that accept Renderables, but must be used carefully.
         It is recommended to use a Variable only in a single place.
     """
+
+    is_constant: Final = False
 
     def update(self, value: Union[int, str, bool]) -> None:
         """Update variable value."""
@@ -353,10 +388,12 @@ class RawText(OperationTrait):
 
     !!! danger
 
-        This class is meant for internal purposes. It will forward the raw text value to any rendering output. It can cause syntax errors or create risky code, if you refer to any signals (bypassing the access checker).
+        This class is meant for internal purposes. It will forward the raw text value to any rendering output.
+        It can cause syntax errors or create risky code, if you refer to any signals (bypassing the access checker).
     """
 
     is_primitive: Final = True
+    is_constant: Final = False
 
     def __init__(self, value: str) -> None:
         """Initialize a primitive value wrapper.
@@ -432,16 +469,43 @@ class SingleOperation(BaseOperation):
     """
 
     is_primitive: Final = False
+    is_constant: Final = False
 
-    def __init__(self, value: Union[Renderable, int, bool], renderer: Type[RendererProto]) -> None:
+    @classmethod
+    def create_or_fold_operation(cls, value: Renderable, renderer: Type[SingleRenderer]) -> Renderable:
+        """Either create a SingleOperation, or fold it into constant value.
+
+        If the expression evaluates to a single integer, returns a Const.
+        If the expression evaluates to a single Renderable, it is returned directly.
+        """
+        if (eval_result := renderer.eval(value)) is not None:
+            if isinstance(eval_result, int):
+                # Return a Const
+
+                # For bitwise inversion or negation, the value can go negative.
+                # It is treated like a unsigned integer, so must be overflowed.
+                if eval_result < 0:
+                    if value.operand_width is None:
+                        # If the operand width is not determined at runtime, the overflow needs to happen in Verilog
+                        return cls(value, renderer)
+                    # Turn value positive
+                    eval_result += 2**value.operand_width
+                return Const(eval_result, width=value.operand_width)
+            else:
+                # Return the single Renderable returned by evaluation
+                return eval_result
+        else:
+            return cls(value, renderer)
+
+    def __init__(self, value: Union[Renderable, int, bool], renderer: Type[SingleRenderer]) -> None:
         """Initialize a single operation wrapper.
 
         Arguments:
             value: The value of this wrapper.
             renderer: Type of renderer to use. The renderer decides how the value is represented.
         """
+        super().__init__()
         self._value = to_renderable(value)
-        super().__init__()  # Requires operands to exist
 
         self._renderer = renderer(self)
 
@@ -473,12 +537,37 @@ class TwoSideOperation(BaseOperation):
     """
 
     is_primitive: Final = False
+    is_constant: Final = False
+
+    @classmethod
+    def create_or_fold_operation(
+        cls,
+        left: Operand,
+        right: Operand,
+        renderer: Type[TwoSideRenderer],
+        width: Optional[Union[int, Callable[[Renderable, Renderable], Optional[int]]]] = None,
+    ) -> Renderable:
+        """Either create a TwoSideOperation, or fold it into constant value.
+
+        If the expression evaluates to a single integer, returns a Const.
+        If the expression evaluates to a single Renderable, it is returned directly.
+        """
+        if (eval_result := renderer.eval(left, right)) is not None:
+            if isinstance(eval_result, int):
+                # Return a Const
+                width = cls.determine_width(to_renderable(left), to_renderable(right), width)
+                return Const(eval_result, width=width)
+            else:
+                # Return the single Renderable returned by evaluation
+                return eval_result
+        else:
+            return cls(left, right, renderer, width=width)
 
     def __init__(
         self,
         left: Union[Renderable, int, bool],
         right: Union[Renderable, int, bool],
-        renderer: Type[RendererProto],
+        renderer: Type[TwoSideRenderer],
         width: Optional[Union[int, Callable[[Renderable, Renderable], Optional[int]]]] = None,
     ) -> None:
         """Initialize a two-side operation wrapper.
@@ -490,17 +579,12 @@ class TwoSideOperation(BaseOperation):
             width: Width of the operation result.
                 Can be an integer, None, or a function that determines it from 2 Renderables.
         """
+        super().__init__()
         self._left = to_renderable(left)
         self._right = to_renderable(right)
-        super().__init__()  # Requires operands to exist
 
         self._renderer = renderer(self)
-
-        # Determine width
-        if isinstance(width, int) or width is None:
-            self._operand_width = width
-        else:
-            self._operand_width = width(self.left, self.right)
+        self._operand_width = self.determine_width(self.left, self.right, width)
 
     @property
     def left(self) -> Renderable:
@@ -526,14 +610,27 @@ class TwoSideOperation(BaseOperation):
         """
         return self._operand_width
 
+    @staticmethod
+    def determine_width(
+        left: Renderable, right: Renderable, width: Optional[Union[int, Callable[[Renderable, Renderable], Optional[int]]]]
+    ) -> Optional[int]:
+        """Determine width of operation, based on operands and optional explicit width."""
+        if isinstance(width, int) or width is None:
+            return width
+        else:
+            return width(left, right)
 
-class SliceOperation(SingleOperation):
+
+class SliceOperation(BaseOperation):
     """Operation wrapper for slicing operations.
 
     This object holds an values (can be an integer, signal name or operation wrapper) and an index.
     """
 
-    def __init__(self, value: Union[Renderable, int, bool], index: Union[int, slice], renderer: Type[RendererProto] = Slice) -> None:
+    is_primitive: Final = False
+    is_constant: Final = False
+
+    def __init__(self, value: Union[Renderable, int, bool], index: Union[int, slice], renderer: Type[SliceRenderer] = Slice) -> None:
         """Initialize a slicing operation wrapper.
 
         Arguments:
@@ -542,7 +639,9 @@ class SliceOperation(SingleOperation):
                    This differs from typical behavior in Python. The step size must be 1.
             renderer: Type of renderer to use. The renderer decides how the value is represented.
         """
-        super().__init__(value, renderer)
+        super().__init__()
+        self._value = to_renderable(value)
+        self._renderer = renderer(self)
 
         if isinstance(index, slice):
             if index.start is None:
@@ -556,6 +655,16 @@ class SliceOperation(SingleOperation):
             self._operand_width = 1
 
         self._index = index
+
+    @property
+    def value(self) -> Renderable:
+        """Value to which the operation is applied."""
+        return self._value
+
+    @property
+    def operands(self) -> Sequence[Renderable]:
+        """All operands of the operation."""
+        return (self.value,)
 
     @property
     def index(self) -> Union[int, slice]:
@@ -573,7 +682,98 @@ class SliceOperation(SingleOperation):
 
 
 # Explicit Operations
-class Concat(BaseOperation):
+class ExplicitOperation(Generic[T_Renderer], BaseOperation):
+    """Baseclass for explicit operation classes."""
+
+    is_primitive: Final = False
+
+    @property
+    @abstractmethod
+    def _renderer_type(self) -> Type[T_Renderer]:
+        """Class for renderer."""
+
+    @property
+    def is_constant(self) -> bool:
+        """Indicates if this object has a constant value."""
+        return self._is_constant
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._renderer: T_Renderer = self._renderer_type(self)
+        self._is_constant = False
+
+
+Part = Union[Renderable, str]
+
+
+class SequenceOperation(ExplicitOperation[SequenceRenderer]):
+    """Baseclass for operations taking a sequence of inputs."""
+
+    @overload
+    def __init__(self, arg: Generator[Part, None, None], /) -> None: ...
+
+    @overload
+    def __init__(self, arg: Part, /, *extra_args: Part) -> None: ...
+
+    def __init__(self, arg: Union[Part, Generator[Part, None, None]], /, *extra_args: Part) -> None:
+        """Initialize a sequence operation.
+
+        Arguments:
+            arg: First renderable item or generator expression.
+            extra_args: More more renderable items.
+
+        All arguments must have a fixed width. Supports constant values as string literals.
+        """
+        super().__init__()
+        self._parts = self._extract_args(arg, extra_args)
+
+    @property
+    def parts(self) -> Sequence[Renderable]:
+        """Parts of the concatenation expression."""
+        return self._parts
+
+    @property
+    def operands(self) -> Sequence[Renderable]:
+        """All operands of the operation."""
+        return self.parts
+
+    # Helper methods
+    @classmethod
+    def _extract_args(cls, arg: Union[Part, Generator[Part, None, None]], extra_args: Sequence[Part]) -> Sequence[Renderable]:
+        """Extract sequence of parts and convert to Renderables."""
+        if isinstance(arg, GeneratorType):
+            args: Iterable[Part] = arg
+            if len(extra_args) > 0:
+                raise ValueError(f'{cls.__name__} can either be created from a generator expression or multiple Renderables.')
+        else:
+            args = (arg, *extra_args)  # type: ignore[arg-type]
+
+        return tuple(to_renderable(arg, allow_string_literal=True) for arg in args)
+
+    def _fold_constants(self) -> None:
+        """Fold constants and short-circuit expressions.
+
+        Subclasses can call this, after they have initialized the operand_width.
+        Because the instance cannot be turned into a Const, its content is pruned and it is advertised as constant.
+        """
+        if (eval_result := self._renderer.eval(*self.parts)) is not None:
+            if isinstance(eval_result, int):
+                self._is_constant = True
+                self._parts = (Const(eval_result, self.operand_width),)
+            else:
+                self._parts = (eval_result,)
+
+    # Support unpacking of constants
+    @property
+    def value(self) -> int:
+        """Value of content, if the object has a constant value."""
+        if self.is_constant:
+            return self.parts[0].value  # type: ignore[attr-defined, no-any-return]
+        else:
+            raise RuntimeError(f"Content of {self.__class__} is not constant. It's value must not be accessed.")
+
+
+class Concat(SequenceOperation):
     """Concatenation expression.
 
     This class is used to model a concatenation of signals (or constants) in Verilog, e.g. `data = {arg2, arg1, arg0};`.
@@ -609,17 +809,24 @@ class Concat(BaseOperation):
         ```
     """
 
-    is_primitive: Final = False
+    _renderer_type: Final = ConcatRenderer
 
-    def __init__(self, *args: Union[Renderable, str]) -> None:
-        """Initialize a concatenation expression.
+    @overload
+    def __init__(self, arg: Generator[Part, None, None], /) -> None: ...
+
+    @overload
+    def __init__(self, arg: Part, /, *extra_args: Part) -> None: ...
+
+    def __init__(self, arg: Union[Part, Generator[Part, None, None]], /, *extra_args: Part) -> None:
+        """Initialize a concatentation expression.
 
         Arguments:
-            args: One or more renderable items. All arguments must have a fixed width. Supports constant values as string literals.
-        """
+            arg: First renderable item or generator expression.
+            extra_args: More renderable items.
 
-        self._parts = tuple(to_renderable(arg, allow_string_literal=True) for arg in args)
-        super().__init__()  # Requires operands to exist
+        All arguments must have a fixed width. Supports constant values as string literals.
+        """
+        super().__init__(arg, *extra_args)
 
         # Calculate and validate width
         self._operand_width: int = 0
@@ -628,15 +835,8 @@ class Concat(BaseOperation):
                 raise ValueError(f'Argument {part} for concatenation does not have a fixed width. This can lead to unpredictable results.')
             self._operand_width += part.operand_width
 
-    @property
-    def parts(self) -> Sequence[Renderable]:
-        """Parts of the concatenation expression."""
-        return self._parts
-
-    @property
-    def operands(self) -> Sequence[Renderable]:
-        """All operands of the operation."""
-        return self.parts
+        # Fold constants
+        self._fold_constants()
 
     # Implement OperationTrait
     @property
@@ -644,39 +844,27 @@ class Concat(BaseOperation):
         """Indicates the width when used as an operand."""
         return self._operand_width
 
-    # Implement OperationTrait
-    def render(self, target: Optional[str] = None) -> str:
-        """Render constant value to target language.
 
-        Arguments:
-            target: Target language.
-        """
-        if target not in self._cache:
-            rendered_parts = [p.render(target) for p in self.parts]
-            self._cache[target] = f'{{{", ".join(rendered_parts)}}}'
-        return self._cache[target]
-
-
-class IfThenElse(BaseOperation):
+class IfThenElse(ExplicitOperation[TernaryRenderer]):
     """Ternary If-Then-Else expression.
 
     This class is used to model the `condition ? true_value : false_value` operator in Verilog.
     """
 
-    is_primitive: Final = False
+    _renderer_type: Final = IfThenElseRenderer
 
-    def __init__(self, cond: Renderable, true_value: Operand, false_value: Operand) -> None:
+    def __init__(self, condition: Renderable, true_value: Operand, false_value: Operand) -> None:
         """Initialize a new If-Then-Else expression.
 
         Arguments:
-            cond: Condition, selecting between `true_value` and `false_value`
+            condition: Condition, selecting between `true_value` and `false_value`
             true_value: Operand that is selected if `cond` is True.
             false_value: Operand that is selected if `cond` is False.
         """
-        self._condition = to_renderable(cond)
+        super().__init__()
+        self._condition = to_renderable(condition)
         self._true_value = to_renderable(true_value)
         self._false_value = to_renderable(false_value)
-        super().__init__()  # Requires operands to exist
 
         # Validate widths and determine result width
         if (cond_width := self._condition.operand_width) != 1:
@@ -689,6 +877,9 @@ class IfThenElse(BaseOperation):
         if (false_width := self.false_value.operand_width) is not None:
             operand_width = max(operand_width, false_width)
         self._operand_width = operand_width if operand_width > 0 else None
+
+        # Fold constants
+        self._fold_constants()
 
     @property
     def condition(self) -> Renderable:
@@ -710,6 +901,22 @@ class IfThenElse(BaseOperation):
         """All operands of the operation."""
         return (self.condition, self.true_value, self.false_value)
 
+    # Helper methods
+    def _fold_constants(self) -> None:
+        """Fold constants and short-circuit expressions.
+
+        Because the instance cannot be turned into a Const, the two branches are set to the same value and it is advertised as constant.
+        """
+        if (eval_result := self._renderer.eval(self.condition, self.true_value, self.false_value)) is not None:
+            self._condition = Const(True)  # Explicitely mark condition as True
+            if isinstance(eval_result, int):
+                # Constant value, mark entire operation as constant
+                self._is_constant = True
+                self._true_value = self._false_value = Const(eval_result, self.operand_width)
+            else:
+                # Single operand, set it for both branches
+                self._true_value = self._false_value = eval_result
+
     # Implement OperationTrait
     @property
     def operand_width(self) -> Optional[int]:
@@ -719,53 +926,46 @@ class IfThenElse(BaseOperation):
         """
         return self._operand_width
 
-    def render(self, target: Optional[str] = None) -> str:
-        """Render constant value to target language.
+    # Support unpacking of constants
+    @property
+    def value(self) -> int:
+        """Value of content, if the object has a constant value."""
+        if self.is_constant:
+            return self.true_value.value  # type: ignore[attr-defined, no-any-return]
+        else:
+            raise RuntimeError(f"Content of {self.__class__} is not constant. It's value must not be accessed.")
 
-        Arguments:
-            target: Target language.
-        """
-        if target not in self._cache:
-            self._cache[target] = f'{self.condition} ? {self.true_value} : {self.false_value}'
-        return self._cache[target]
 
+class LogicalOperation(SequenceOperation):
+    """Intermediate class for logical operations.
 
-class LogicalOperation(BaseOperation):
-    is_primitive: Final = False
+    These operations take a flexible number of inputs and result in a single-bit output.
+    """
 
     @overload
-    def __init__(self, arg: Generator[Renderable, None, None], /) -> None: ...
+    def __init__(self, arg: Generator[Part, None, None], /) -> None: ...
 
     @overload
-    def __init__(self, arg: Renderable, /, *extra_args: Renderable) -> None: ...
+    def __init__(self, arg: Part, /, *extra_args: Part) -> None: ...
 
-    def __init__(self, arg: Union[Renderable, Generator[Renderable, None, None]], /, *extra_args: Renderable) -> None:
-        """Initialize a logic operation.
+    def __init__(self, arg: Union[Part, Generator[Part, None, None]], /, *extra_args: Part) -> None:
+        """Initialize a logical operation.
 
         Arguments:
             arg: First renderable item or generator expression.
-            extra_args: More more renderable items. All arguments must have a fixed width. Supports constant values as string literals.
+            extra_args: More renderable items.
+
+        All arguments must have a fixed width. Supports constant values as string literals.
         """
-        if isinstance(arg, GeneratorType):
-            args: Iterable[Renderable] = arg
-            if len(extra_args) > 0:
-                raise ValueError('Logical operation can either be created from a generator expression or multiple Renderables.')
-        else:
-            args = (arg, *extra_args)  # type: ignore[arg-type]
+        super().__init__(arg, *extra_args)
 
-        self._operands = tuple(to_renderable(arg, allow_string_literal=True) for arg in args)
-
-        super().__init__()  # Requires operands to exist
-
-        # Calculate and validate width
+        # Validate width
         for part in self.operands:
             if part.operand_width != 1:
                 raise ValueError(f'Argument {part} for logical operation does not have a fixed width of 1. This is not allowed.')
 
-    @property
-    def operands(self) -> Sequence[Renderable]:
-        """All operands of the operation."""
-        return self._operands
+        # Fold constants
+        self._fold_constants()
 
     # Implement OperationTrait
     @property
@@ -791,17 +991,7 @@ class Any(LogicalOperation):
         ```
     """
 
-    # Implement OperationTrait
-    def render(self, target: Optional[str] = None) -> str:
-        """Render constant value to target language.
-
-        Arguments:
-            target: Target language.
-        """
-        if target not in self._cache:
-            rendered_parts = [p.render(target) for p in self.operands]
-            self._cache[target] = f'({" || ".join(rendered_parts)})'
-        return self._cache[target]
+    _renderer_type: Final = AnyRenderer
 
 
 class All(LogicalOperation):
@@ -821,14 +1011,4 @@ class All(LogicalOperation):
         ```
     """
 
-    # Implement OperationTrait
-    def render(self, target: Optional[str] = None) -> str:
-        """Render constant value to target language.
-
-        Arguments:
-            target: Target language.
-        """
-        if target not in self._cache:
-            rendered_parts = [p.render(target) for p in self.operands]
-            self._cache[target] = f'({" && ".join(rendered_parts)})'
-        return self._cache[target]
+    _renderer_type: Final = AllRenderer

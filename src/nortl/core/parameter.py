@@ -23,6 +23,7 @@ class Parameter(OperationTrait):
     """
 
     is_primitive: Final = True
+    is_constant: Final = False
 
     def __init__(self, engine: EngineProto, name: str, default_value: int, width: Optional[int] = None) -> None:
         """Initialize a Parameter object.

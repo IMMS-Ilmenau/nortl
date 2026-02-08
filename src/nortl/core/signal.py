@@ -111,6 +111,7 @@ class _BaseSignal(OperationTrait, NamedEntity, metaclass=ABCMeta):
     """Abstract base class for signals."""
 
     is_primitive: Final = True
+    is_constant: Final = False
 
     def __init__(self, name: str):
         super().__init__(name)
