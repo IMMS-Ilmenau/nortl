@@ -9,6 +9,7 @@ __all__ = [
     'UnregisteredRead',
     'Volatile',
 ]
+
 T_Content = TypeVar('T_Content', bound=Renderable)
 T_Signal = TypeVar('T_Signal', bound=AnySignal)
 
@@ -38,6 +39,11 @@ class BaseModifier(Generic[T_Content], OperationTrait):
         return self.content.is_primitive
 
     @property
+    def is_constant(self) -> bool:
+        """Indicates if this object has a constant value."""
+        return self.content.is_constant
+
+    @property
     def operand_width(self) -> Optional[int]:
         """Indicates the width when used as an operand, equal to the width of the alias operation.
 
@@ -57,6 +63,15 @@ class BaseModifier(Generic[T_Content], OperationTrait):
         return self.render()
 
     # TODO Modifier must only be valid within current construct
+
+    # Support unpacking of constants
+    @property
+    def value(self) -> int:
+        """Value of content, if the object has a constant value."""
+        if self.is_constant:
+            return self.content.value  # type: ignore[attr-defined, no-any-return]
+        else:
+            raise RuntimeError("Content of modifier is not constant. It's value must not be accessed.")
 
 
 class UnregisteredRead(Generic[T_Content], BaseModifier[T_Content]):

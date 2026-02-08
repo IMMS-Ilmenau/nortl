@@ -6,23 +6,43 @@ from nortl.core import Const, Signal
 from nortl.core.engine import CoreEngine
 
 
-def test_arithmethics(a: Signal) -> None:
+def test_arithmethics(a: Signal, b: Signal) -> None:
     """Test all arithmetic operations."""
     # Addition
     assert (a + 1).render() == '(a + 1)'  # Note that all two-sided operations are wrapped in brackets
     assert (1 + a).render() == '(1 + a)'
 
+    # Addition short circuits for addition of 0
+    assert (a + 0).render() == 'a'
+    assert (0 + a).render() == 'a'
+
     # Substraction
     assert (a - 1).render() == '(a - 1)'
     assert (1 - a).render() == '(1 - a)'
 
+    # Substraction short circuits for substrction of 0
+    assert (a - 0).render() == 'a'
+    assert (0 - a).render() == '-a'
+
     # Multiplication
-    assert (a * 1).render() == '(a * 1)'
-    assert (1 * a).render() == '(1 * a)'
+    assert (a * 2).render() == '(a * 2)'
+    assert (2 * a).render() == '(2 * a)'
+
+    # Multiplication short circuits for multiplication with 0 or 1
+    assert (a * 0).render() == '0'
+    assert (0 * a).render() == '0'
+    assert (a * 1).render() == 'a'
+    assert (1 * a).render() == 'a'
 
     # Division
-    assert (a / 1).render() == '(a / 1)'
-    assert (1 / a).render() == '(1 / a)'
+    assert (a / 2).render() == '(a / 2)'
+    assert (2 / a).render() == '(2 / a)'
+
+    # Division short circuits for division by 0 or 1
+    with pytest.raises(ZeroDivisionError):
+        a / 0
+    assert (0 / a).render() == '0'
+    assert (a / 1).render() == 'a'
 
     # Modulo
     assert (a % 1).render() == r'(a % 1)'
@@ -70,9 +90,17 @@ def test_logic(a: Signal) -> None:
     assert (a & 1).render() == '(a & 1)'
     assert (1 & a).render() == '(1 & a)'
 
+    # And short-circuits for x & 0
+    assert (a & 0).render() == '0'
+    assert (0 & a).render() == '0'
+
     # Or
     assert (a | 1).render() == '(a | 1)'
     assert (1 | a).render() == '(1 | a)'
+
+    # Or short circuits for x | 0
+    assert (a | 0).render() == 'a'
+    assert (0 | a).render() == 'a'
 
     # ExclusiveOr
     assert (a ^ 1).render() == '(a ^ 1)'
@@ -82,9 +110,17 @@ def test_logic(a: Signal) -> None:
     assert (a << 1).render() == '(a << 1)'
     assert (1 << a).render() == '(1 << a)'
 
+    # LeftShift short circuits for shift of/by 0
+    assert (a << 0).render() == 'a'
+    assert (0 << a).render() == '0'
+
     # RightShift
     assert (a >> 1).render() == r'(a >> 1)'
     assert (1 >> a).render() == r'(1 >> a)'
+
+    # RightShift short circuits for shift of/by 0
+    assert (a >> 0).render() == 'a'
+    assert (0 >> a).render() == '0'
 
 
 def test_misc(a: Signal) -> None:
@@ -94,8 +130,8 @@ def test_misc(a: Signal) -> None:
     assert (-Const(1)).render() == '-1'
 
     # Positive
-    assert (+a).render() == '+a'
-    assert (+Const(1)).render() == '+1'
+    assert (+a).render() == 'a'
+    assert (+Const(1)).render() == '1'
 
     # Inversion
     assert (~a).render() == '~(a)'

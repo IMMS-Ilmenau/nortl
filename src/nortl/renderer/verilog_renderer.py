@@ -6,7 +6,6 @@ from .verilog_utils.process import AlwaysComb, AlwaysFF, VerilogAssignment, Veri
 from .verilog_utils.structural import VerilogDeclaration, VerilogModule
 
 # FIXME: Make empty blocks being not rendered at all.
-# FIXME: Remove if(1) statements
 
 
 class VerilogRenderer:
@@ -232,9 +231,14 @@ class VerilogRenderer:
                 cases.add_case(state.name)
 
                 for condition, next_state in state.transitions:
-                    item = VerilogIf(condition)
-                    item.true_branch.add(VerilogAssignment(state_nxt_variable, next_state))
-                    cases.add_item(state.name, item)
+                    if condition.render() == "1'h1":
+                        cases.add_item(state.name, VerilogAssignment(state_nxt_variable, next_state))
+                    elif condition.render() == "1'h0":
+                        pass
+                    else:
+                        item = VerilogIf(condition)
+                        item.true_branch.add(VerilogAssignment(state_nxt_variable, next_state))
+                        cases.add_item(state.name, item)
 
             next_state_func.add(cases)
 

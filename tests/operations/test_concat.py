@@ -3,6 +3,7 @@
 import pytest
 
 from nortl import Concat, Const
+from nortl.core.engine import CoreEngine
 from nortl.core.signal import Signal
 
 
@@ -56,3 +57,37 @@ def test_concat_parameter(byte: Signal) -> None:
     N_COUNTERS = byte.engine.define_parameter('N_COUNTERS')  # noqa: N806
     with pytest.raises(ValueError):
         Concat(N_COUNTERS)
+
+
+def test_concat_single(byte: Signal) -> None:
+    """Test concatenation of a single element."""
+
+    # If the concatenation contains only a single element, it is directly return
+    val = Concat(byte)
+    assert val.operand_width == 8
+    assert not val.is_constant
+    assert val.render() == 'byte'
+
+    val = Concat('0b0000')
+    assert val.operand_width == 4
+    assert val.is_constant
+    assert val.render() == "4'h0"
+
+
+def test_generator_expression(engine: CoreEngine) -> None:
+    """Concat operation can be directly created from a generator expression."""
+    signals = [engine.define_scratch(8) for _ in range(3)]
+
+    iterator = (signal for signal in signals)
+    val = Concat(iterator)
+    assert val.operand_width == 24
+    assert val.render() == '{SCRATCH_SIGNAL[7:0], SCRATCH_SIGNAL[15:8], SCRATCH_SIGNAL[23:16]}'
+
+    # If a generator expression is used as the first argument, no further arguments are allowed
+    with pytest.raises(ValueError):
+        val = Concat(iterator, signals[0])  # type: ignore
+
+    # This works again
+    val = Concat(*signals, signals[0])
+    assert val.operand_width == 32
+    assert val.render() == '{SCRATCH_SIGNAL[7:0], SCRATCH_SIGNAL[15:8], SCRATCH_SIGNAL[23:16], SCRATCH_SIGNAL[7:0]}'
