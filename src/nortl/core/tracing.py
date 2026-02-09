@@ -36,7 +36,7 @@ except ImportError:
             raise RuntimeError(f'Unable to create PyinstrumentSession.\n{PROFILING_INSTALL_NOTICE}')
 
     def build_call_stack(frames: Sequence[FrameInfo]) -> List[str]:
-        raise RuntimeError('Unable to build call stack.\n{PROFILING_INSTALL_NOTICE}')
+        return [f'{frame.filename:{frame.lineno}}' for frame in frames]  # Return dummy call stack
 
 
 __all__ = [
@@ -262,7 +262,7 @@ class Session:
             description: Additional description for the session.
         """
         if not PROFILING_AVAILABLE:
-            raise RuntimeError('Unable to export Session.\n{PROFILING_INSTALL_NOTICE}')
+            raise RuntimeError(f'Unable to export Session.\n{PROFILING_INSTALL_NOTICE}')
 
         target_description = f'Trace for noRTL engine {self.tracer.engine.module_name}'
         if description is not None:
