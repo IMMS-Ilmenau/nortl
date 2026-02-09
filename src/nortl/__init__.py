@@ -5,7 +5,7 @@ from typing import Union
 from nortl import verilog_library
 from nortl.algorithms import ReachabilityAnalysisMixin, StateMergerMixin
 from nortl.components import Channel, ElasticChannel, Timer
-from nortl.core import All, Any, Concat, Const, CoreEngine, IfThenElse, Var, Volatile
+from nortl.core import All, Any, Concat, Const, CoreEngine, IfThenElse, Var, Volatile, enable_tracing, to_renderable
 from nortl.core.constructs import Condition, ElseCondition, Fork, ForLoop, WhileLoop
 from nortl.core.protocols import ParameterProto, Renderable
 
@@ -19,6 +19,8 @@ __all__ = [
     'IfThenElse',
     'Var',
     'Volatile',
+    'enable_tracing',
+    'to_renderable',
 ]
 
 

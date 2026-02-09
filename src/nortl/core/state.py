@@ -52,6 +52,9 @@ class State(NamedEntity):
         self._prints: List[Tuple[str, Tuple[Renderable, ...]]] = []
         self._printfs: Dict[str, List[Tuple[str, Tuple[Renderable, ...]]]] = {}
 
+        # Store stack trace at point of creation
+        self.engine.tracer.add_metadata(self, 'stack@creation', profile=True)
+
     @property
     def engine(self) -> EngineProto:
         """Engine that this state belongs to."""

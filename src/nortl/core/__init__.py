@@ -12,9 +12,10 @@ from .exceptions import (
     WriteViolationError,
 )
 from .modifiers import Volatile
-from .operations import All, Any, Concat, Const, IfThenElse, Var
+from .operations import All, Any, Concat, Const, IfThenElse, Var, to_renderable
 from .parameter import Parameter
 from .signal import Signal
+from .tracing import enable_tracing
 
 __all__ = [
     'All',
@@ -37,4 +38,6 @@ __all__ = [
     'Var',
     'Volatile',
     'WriteViolationError',
+    'enable_tracing',
+    'to_renderable',
 ]
