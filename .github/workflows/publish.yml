@@ -1,0 +1,31 @@
+name: Publish to Pypi
+
+# Run workflow if tests are completed
+on:
+  workflow_run:
+    workflows:
+      - "Run Tests"
+    types:
+      - completed
+
+jobs:
+  publish:
+    name: Publish on Pypi
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/nortl
+    permissions:
+      id-token: write
+      contents: read
+
+    # Only publish to PyPi on tag pushes
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      - name: Build Project
+        run: uv build
+      - name: Publish on Pypi
+        run: uv publish
