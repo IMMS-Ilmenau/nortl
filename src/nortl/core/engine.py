@@ -11,6 +11,7 @@ from nortl.core.process import Thread, Worker
 from nortl.core.protocols import AssignmentTarget, ModuleProto, PermanentSignal, Renderable, StateProto, WorkerProto
 from nortl.core.signal import ScratchSignal, Signal, SignalSlice
 from nortl.core.state import State
+from nortl.core.tracing import Tracer
 
 __all__ = [
     'CoreEngine',
@@ -48,6 +49,9 @@ class CoreEngine:
         self.module_name = module_name
         self._reset_state_name = reset_state_name
 
+        # Create tracer
+        self._tracer = Tracer(self)
+
         # Parameters, signals and scratch signals
         self._parameters: Dict[str, Parameter] = dict()
         self._signal_manager = SignalManager(self)
@@ -64,6 +68,12 @@ class CoreEngine:
 
         # Create main thread
         self._main_thread = self.main_worker.create_thread(self.MAIN_THREAD_NAME)
+
+    # Tracing
+    @property
+    def tracer(self) -> Tracer:
+        """Tracer for diagnostic information."""
+        return self._tracer
 
     # State management
     @property

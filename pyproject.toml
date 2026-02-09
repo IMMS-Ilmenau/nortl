@@ -20,6 +20,9 @@ type-stubs = [
     "pytest-stub",
     "types-networkx",
 ]
+profiler = [
+    "pyinstrument>=5.1.2",
+]
 
 [project.urls]
 Homepage = "https://github.com/IMMS-Ilmenau/nortl"
@@ -40,7 +43,7 @@ required-version = ">=0.9.10"
 # Dependency groups
 [dependency-groups]
 dev = [
-    "nortl[type-stubs]",
+    "nortl[type-stubs, profiler]",
     # tox
     "tox>=4.33.0",
     "tox-uv>=1.29.0",

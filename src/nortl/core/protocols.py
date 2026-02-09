@@ -290,6 +290,10 @@ class EngineProto(_StateManager, Protocol):
 
     module_name: str
 
+    # Tracing
+    @property
+    def tracer(self) -> 'TracerProto': ...
+
     # State manegement (+_StateManager)
     @property
     def states(self) -> Mapping[str, Sequence[StateProto]]: ...
@@ -632,3 +636,9 @@ class ThreadProto(NamedEntityProto, Protocol):
 
     @property
     def call_stack(self) -> List[Self]: ...
+
+
+class TracerProto(Protocol):
+    def add_metadata(self, target: NamedEntityProto, key: str, profile: bool = False) -> None: ...
+
+    def format_metadata(self, target: NamedEntityProto, key: str) -> str: ...
