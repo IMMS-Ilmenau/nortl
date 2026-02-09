@@ -3,6 +3,7 @@
 from typing import Union
 
 from nortl import verilog_library
+from nortl.algorithms import ReachabilityAnalysisMixin, StateMergerMixin
 from nortl.components import Channel, ElasticChannel, Timer
 from nortl.core import All, Any, Concat, Const, CoreEngine, IfThenElse, Var, Volatile
 from nortl.core.constructs import Condition, ElseCondition, Fork, ForLoop, WhileLoop
@@ -69,7 +70,7 @@ class ConstructsMixin(CoreEngine):
         return WhileLoop(self, condition)
 
 
-class Engine(ComponentsMixin, ConstructsMixin, CoreEngine):
+class Engine(ComponentsMixin, ConstructsMixin, ReachabilityAnalysisMixin, StateMergerMixin, CoreEngine):
     """noRTL Engine."""
 
     def __init__(self, module_name: str, reset_state_name: str = 'IDLE') -> None:

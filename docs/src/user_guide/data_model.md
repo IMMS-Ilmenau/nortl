@@ -16,7 +16,7 @@ In this way, an *a priory* declaration can be omitted. Also, signals can be defi
 
 ### The Single Source of Truth Principle
 
-The entire data model embodies the **single source of truth** principle. Every aspect of the state machine (states, transitions, assignments, signal definitions) is defined once in the `CoreFSFM` structure and then used to generate all outputs. This eliminates the risk of having to manually update multiple files when a state machine design changes — a common problem in traditional RTL development.
+The entire data model embodies the **single source of truth** principle. Every aspect of the state machine (states, transitions, assignments, signal definitions) is defined once in the `CoreEngine` structure and then used to generate all outputs. This eliminates the risk of having to manually update multiple files when a state machine design changes — a common problem in traditional RTL development.
 
 For example, when adding a new state:
 
@@ -32,17 +32,42 @@ This approach dramatically reduces cognitive load on the designer and minimizes 
 
 The `CoreEngine` object serves as the central container for the entire state machine, but its role extends far beyond simple storage. It is designed as a **code generation blueprint** that coordinates all components for output to HDL. This design choice embodies the critical principle of **single source of truth** for the state machine description.
 
-#### State Management
+#### State Management and Control Flow
 
+The main idea of the state management is, that the user *never* has to declare states manually. This is done under the hood of the `engine` class.
+
+#### Use Model
+In the user's code, the only functions used for state management are:
+
+  - `engine.sync()`: Create a next state and (unconditionally) transition to it.
+  - `engine.wait_for(some_condition)`: Create a next state and add a conditional transition. The engine will pause here until the transition can be taken.
+
+For conditional execution, the `engine.jump_if(some_condition, true_branch, false_branch)` can be used. However, this function requires knowledge about existing states and may require to add new states manually. To provide a more friendly interface, conditional execution can be programmed using the context managers for control structures:
+
+  - `engine.condition(condition)`, `engine.else_condition()`: To realize a if-else behavior
+  - `engine.for_loop(start, stop, increment)`: For-Loop
+  - `engine.while_loop(condition)`: While loop
+
+Under the hood, these context managers use the afforementioned `jump_if` and deal internally with state mingling to keep this complexity away from the user.
+
+#### Internals
 The `engine.states` collection is not merely a list -- it's the *only* source of truth for all states. This design ensures that any modification (adding, removing, or changing states) is reflected consistently across all generated code. When a new state is added via `engine.add_state("NEW_STATE")`, the state immediately becomes available for transition definition and assignment configuration. This eliminates the need for manual synchronization across multiple files, which is a common source of errors in traditional RTL development.
 
 #### Signal Management
 
-  - define_local: ...
-  - define_input. ...
-  - define_output: ...
+The signal and register management is done by the `SignalManager` and `ScratchManager` classes. These hold lists of signal objects that are currently declared.
+Contrary to verilog, a new register may be declared at every position in the code -- The `engine` class cares about shifting the declarations to the appropriate positions in the resulting code.
 
-#### Instances
+To introduce a new signal or register to the circuit, the engine provides factory methods:
+
+  - `engine.define_input(name: str, width: int)`. Creates an input signal. The name has to be a verilog identifier.
+  - `engine.define_output(name: str, width: int, reset_value: int = 0)`: Defines a register that is connected to an output signal.
+  - `engine.define_local(name: str, width: int, reset_value: int = 0)`: Creates a register without connection to the outside world.
+  - `engine.define_scratch(width: int)`: Returns a scratch register. This signal is a part of an internal multi-purpose register bank and can be used like a normal register until it is released. After release, the signal may be used by a next routine. Note that these registers are released automatically, when exiting the context manager where they were defined.
+
+For details about signal management, please find the special sections (once available).
+
+#### Modules & Instances -- Integration of Verilog Modules
 
 - **Instances**: ...
 
@@ -51,24 +76,21 @@ The `engine.states` collection is not merely a list -- it's the *only* source of
 
 States in noRTL are not just named entities—they are full execution units with their own logic. Each `State` object contains:
 
-- **Assignments**: These define what outputs should be set in the state, directly mapping to Verilog assignments. For example:
-  ```python
-  state.assign('output_signal', 1)
-  ```
-  becomes:
-  ```verilog
-  output_signal <= 1;
-  ```
-  in Verilog. This preserves the exact value and signal name while maintaining a clean high-level interface.
+- **Assignments**: ...
+- **Transitions**: ...
+- **Prints** ...
 
-- **Transitions**: Each state maintains a list of possible transitions with associated conditions.
 
+### Parallel Behavior with Workers and Threads
+...
 
 ### Metadata for Objects
-
+...
 
 ### The `Renderable` Concept
 
 The `Renderable` interface (not explicitly shown in the provided code but implied by the structure) is critical for the data model's flexibility. It allows different components (like signals, states, assignments) to be converted to their HDL representation consistently. For example, the `Signal` class implements a `render()` method that returns the appropriate Verilog representation.
+
+Along this way, constants are automatically combined on python level to make life of the synthesis flow easier. This is also used to clean out conditional transitions that are always on.
 
 This concept enables the system to handle complex expressions and signals uniformly, whether they're simple assignments or nested structures.

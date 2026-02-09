@@ -253,3 +253,18 @@ def test_subsequent_nested_fork_worker_assign() -> None:
     assert proc2.worker.name != proc4.worker.name
 
     assert proc3.worker.name != proc4.worker.name
+
+
+def test_fork_metadata() -> None:
+    engine = Engine('my_engine')
+    _ = engine.define_input('IN')
+
+    engine.sync()
+
+    start_state = engine.current_state
+
+    with Fork(engine, 'f1'):
+        assert engine.current_state.get_metadata('Fork Select ID', 1)
+
+    assert start_state.has_metadata('Forked Processes')
+    assert start_state.get_metadata('Forked Processes') == [('WORKER_1', 1)]

@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
 from typing_extensions import Self
 
 from nortl.core.exceptions import ConflictingAssignmentError, ForbiddenAssignmentError, TransitionLockError, TransitionRestrictionError
+from nortl.core.operations import Const
 
 from .common import NamedEntity
 from .protocols import AssignmentTarget, EngineProto, Renderable, StateProto, WorkerProto
@@ -39,7 +40,7 @@ class State(NamedEntity):
 
         self._allow_assignments = allow_assignments
 
-        self._assignments: List[Tuple[AssignmentTarget, Renderable]] = []
+        self._assignments: List[Tuple[AssignmentTarget, Renderable, Renderable]] = []
         self._assigned_signal_names: Set[str] = set()
 
         # Transition <Condition>, <next value of state variable>
@@ -101,18 +102,21 @@ class State(NamedEntity):
         return self._allow_assignments
 
     @property
-    def assignments(self) -> Sequence[Tuple[AssignmentTarget, Renderable]]:
+    def assignments(self) -> Sequence[Tuple[AssignmentTarget, Renderable, Renderable]]:
         """Sequence of assignments for this state."""
         return self._assignments
 
-    def add_assignment(self, signal: AssignmentTarget, value: Renderable) -> None:
+    def add_assignment(self, signal: AssignmentTarget, value: Renderable, condition: Optional[Renderable] = None) -> None:
         """Add assignment to this state."""
         if not self.allow_assignments:
             raise ForbiddenAssignmentError(f'State {self.name} does not allow assignments.')
 
-        # Check if signal is already assigned
-        if (old_assignment := self.get_assignment(signal)) is not None:
-            other_signal, old_value = old_assignment
+        if condition is None:
+            condition = Const(1)
+
+        # Check if signal is already assigned for unconditional assigns
+        if (old_assignment := self.get_assignment(signal)) is not None and (condition == 1).render() == "1'h1":
+            other_signal, old_value, _ = old_assignment
 
             overlap = signal.overlaps_with(other_signal)
 
@@ -130,10 +134,10 @@ class State(NamedEntity):
                     f'Previous value was {old_value}, new value would be {value}. Refusing to overwrite the signal.'
                 )
 
-        self._assignments.append((signal, value))
+        self._assignments.append((signal, value, condition))
         self._assigned_signal_names.add(signal.name)
 
-    def get_assignment(self, signal: AssignmentTarget) -> Optional[Tuple[AssignmentTarget, Renderable]]:
+    def get_assignment(self, signal: AssignmentTarget) -> Optional[Tuple[AssignmentTarget, Renderable, Renderable]]:
         """Get current assignment for a signal.
 
         Arguments:
@@ -141,13 +145,16 @@ class State(NamedEntity):
 
         Returns:
             The current assignment for this signal or None, if it is not assigned.
+
+
+        !!! note: This returns only the first assignment and does not deal with conditional assigns!
         """
         # Use a set of the assigned signal names for quick check. In case of a match, search for the signal.
         if signal.name in self._assigned_signal_names:
-            for other_signal, value in self.assignments:
+            for other_signal, value, condition in self.assignments:
                 # Check by signal name, will also find slices of the same signal
                 if signal.name == other_signal.name:
-                    return other_signal, value
+                    return other_signal, value, condition
         return None
 
     # Transition Management
@@ -164,7 +171,8 @@ class State(NamedEntity):
             raise TransitionRestrictionError(
                 f'This state was restricted to transitions to state {self._restricted_state.name}. Unable to add other transitions.'
             )
-        self._transitions.append((condition, state))  # type: ignore[arg-type]
+        if condition.render() != "1'h0":
+            self._transitions.append((condition, state))  # type: ignore[arg-type]
 
     def _restrict_transition(self, state: StateProto) -> None:
         """Restrict transitions to only allow one other state."""
@@ -199,3 +207,23 @@ class State(NamedEntity):
             self._printfs[fname].append((line, args))
         else:
             self._printfs[fname] = [(line, args)]
+
+    @property
+    def signature(self) -> str:
+        """Create a string that comprises all assignments and transitions.
+
+        This will be used for redundant state detection.
+        """
+        ret = ''
+
+        ret += 'Assignments: \n'
+
+        for target, value, condition in sorted(self.assignments, key=lambda x: str(x[0])):
+            ret += f'if {condition.render()}: {target} <= {value.render()} \n'
+
+        ret += 'Transitions: \n'
+
+        for condition, next_state in self.transitions:
+            ret += f'If ({condition.render()}), then {next_state.name}\n'
+
+        return ret
