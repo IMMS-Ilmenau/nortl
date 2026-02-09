@@ -129,8 +129,8 @@ class VerilogRenderer:
                         block.true_branch.add(VerilogAssignment('GCLK_enable', "1'b1"))
                         cases.add_item(state.name, block)
 
-                    for signal, val in state.assignments:
-                        block = VerilogIf(signal != val)
+                    for signal, val, condition in state.assignments:
+                        block = VerilogIf((signal != val) & (condition))
                         block.true_branch.add(VerilogAssignment('GCLK_enable', "1'b1"))
                         cases.add_item(state.name, block)
 
@@ -252,7 +252,7 @@ class VerilogRenderer:
         """
         output_func = AlwaysFF('CLK_I', 'RST_ASYNC_I')
 
-        for signal, reset_val in self.engine.main_worker.reset_state.assignments:
+        for signal, reset_val, _ in self.engine.main_worker.reset_state.assignments:
             output_func.add_reset(VerilogAssignment(signal, reset_val))
 
         for signal in self.engine.signals.values():
@@ -267,8 +267,13 @@ class VerilogRenderer:
                 if len(state.assignments) > 0:
                     cases.add_case(state.name)
 
-                    for signal, val in state.assignments:
-                        cases.add_item(state.name, VerilogAssignment(signal, val))
+                    for signal, val, condition in state.assignments:
+                        if condition.render() == "1'h1":
+                            cases.add_item(state.name, VerilogAssignment(signal, val))
+                        else:
+                            block = VerilogIf(condition)
+                            block.true_branch.add(VerilogAssignment(signal, val))
+                            cases.add_item(state.name, block)
 
             output_func.add(cases)
 

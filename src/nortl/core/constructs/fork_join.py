@@ -41,10 +41,13 @@ class Fork:
 
         self.engine.current_state = self.assigned_worker.reset_state
 
-        condition = Condition(self.engine, self.assigned_worker.start & (self.assigned_worker.select == len(self.assigned_worker.threads)))
+        select_id = len(self.assigned_worker.threads)
+
+        condition = Condition(self.engine, self.assigned_worker.start & (self.assigned_worker.select == select_id))
 
         with condition:
             state_within_condition = self.engine.current_state
+            state_within_condition.set_metadata('Fork Select ID', select_id)
             self.engine.set(self.assigned_worker.idle, 0)
 
         for worker in self.engine.workers.values():
@@ -78,7 +81,17 @@ class Fork:
         self.engine.current_worker = self.checkpoint_worker
         self.engine.current_state = self.checkpoint_state
 
+        thread_id = len(self.assigned_worker.threads)
         # Now the thread has been rendered and so we start the Worker!
         self.engine.set(self.assigned_worker.start, 1)
-        self.engine.set(self.assigned_worker.select, (len(self.assigned_worker.threads)))
+        self.engine.set(self.assigned_worker.select, thread_id)
+
+        # Inform the state via metadata that it actually started a thread
+        metadata = (self.assigned_worker.name, thread_id)
+        if self.engine.current_state.has_metadata('Forked Processes'):
+            old_data = self.engine.current_state.get_metadata('Forked Processes')
+            self.engine.current_state.set_metadata('Forked Processes', old_data.append(metadata))
+        else:
+            self.engine.current_state.set_metadata('Forked Processes', [metadata])
+
         self.engine.sync()
