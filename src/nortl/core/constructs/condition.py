@@ -1,6 +1,6 @@
 from types import TracebackType
 
-from nortl.core import Const
+from nortl.core import Any, Const
 from nortl.core.protocols import EngineProto, Renderable
 from nortl.core.state import State
 
@@ -88,20 +88,24 @@ class Condition:
     ) -> None:
         jumpconds = [t[0] for t in self.engine.current_state.transitions]
         if Const(1) not in jumpconds:
-            self.engine.jump_if(Const(1), self.final_state)
+            self.engine.jump_if(Const(1, 1), self.final_state)
         self.engine.current_state = self.final_state
 
         self.engine.scratch_manager.exit_context()
 
 
 def get_else_condition(state: State) -> Renderable:
-    conditions = [c for c, _ in state.transitions]
-    ret: Renderable = Const(1)
+    conditions = []
+    for c, _ in state.transitions:
+        if c.operand_width != 1:
+            c = c != 0
 
-    for c in conditions:
-        ret = ret & ~c
+        conditions.append(c)
 
-    return ret
+    if len(conditions) == 0:
+        return Const(1, 1)
+
+    return ~Any(*conditions)
 
 
 class ElseCondition(Condition):

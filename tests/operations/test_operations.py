@@ -106,6 +106,10 @@ def test_logic(a: Signal) -> None:
     assert (a ^ 1).render() == '(a ^ 1)'
     assert (1 ^ a).render() == '(1 ^ a)'
 
+    # ExclusiveOr Short Circuits for x ^ 0
+    assert (a ^ 0).render() == 'a'
+    assert (0 ^ a).render() == 'a'
+
     # LeftShift
     assert (a << 1).render() == '(a << 1)'
     assert (1 << a).render() == '(1 << a)'

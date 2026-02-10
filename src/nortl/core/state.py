@@ -115,7 +115,7 @@ class State(NamedEntity):
             raise ForbiddenAssignmentError(f'State {self.name} does not allow assignments.')
 
         if condition is None:
-            condition = Const(1)
+            condition = Const(1, 1)
 
         # Check if signal is already assigned for unconditional assigns
         if (old_assignment := self.get_assignment(signal)) is not None and (condition == 1).render() == "1'h1":

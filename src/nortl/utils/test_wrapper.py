@@ -8,7 +8,7 @@ from types import FrameType
 
 import pytest
 
-from nortl.core import CoreEngine
+from nortl.core import Const, CoreEngine
 from nortl.core.constructs import Condition, ElseCondition, Fork
 from nortl.core.modifiers import UnregisteredRead
 from nortl.core.operations import to_renderable
@@ -135,6 +135,9 @@ class NoRTLTestBase(ABC):
         self.engine.print(f'Assertion \\"{code_context}\\" failed at {fi.filename}:{frame.f_lineno}')
 
     def assertTrue(self, condition: Renderable | int) -> None:  # noqa: N802
+        if isinstance(condition, int):
+            condition = Const(condition, 1)
+
         with Condition(self.engine, UnregisteredRead(~to_renderable(condition))):
             frame = currentframe()
             if frame is not None:

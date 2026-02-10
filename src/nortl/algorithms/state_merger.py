@@ -1,6 +1,7 @@
 from typing import Dict, List, Set, Tuple
 
 from nortl.core.engine import CoreEngine
+from nortl.core.operations import Any
 from nortl.core.protocols import Renderable, StateProto
 
 
@@ -28,7 +29,7 @@ class StateMergerMixin(CoreEngine):
 
         return ret
 
-    def _merge_states(self, workername: str, state_lst: List[str]) -> None:
+    def _merge_same_signature_states(self, workername: str, state_lst: List[str]) -> None:
         """Merge states by re-referencing transitions.
 
         This function uses a list of given states and merges them by preserving the first state in the list and
@@ -62,7 +63,7 @@ class StateMergerMixin(CoreEngine):
                     tmplst = []
                     for c, t in new_transitions:
                         if t == target:
-                            c = c | (condition)
+                            c = Any(c, condition)
                         tmplst.append((c, t))
                     new_transitions = tmplst
                 else:
@@ -78,7 +79,7 @@ class StateMergerMixin(CoreEngine):
         worker._states = [state for state in worker.states if state.name not in merged_state_names]
         worker._state_names = set([state.name for state in worker.states])
 
-    def _state_merging_single_iteration(self) -> int:
+    def _same_signature_state_merging_single_iteration(self) -> int:
         """Executes a single iteration and returns the number of merged states.
 
         For this purpose, the signatures of all states are extracted and grouped.
@@ -94,7 +95,7 @@ class StateMergerMixin(CoreEngine):
 
             for merge_items in mergelist:
                 ret += len(merge_items) - 1
-                self._merge_states(workername, merge_items)
+                self._merge_same_signature_states(workername, merge_items)
         return ret
 
     def state_merging(self) -> None:
@@ -140,5 +141,5 @@ class StateMergerMixin(CoreEngine):
         After this iteration there is no possible further merge. Therefore the next iteration will not change the
         state diagram and will end the procedure.
         """
-        while self._state_merging_single_iteration() > 0:
+        while self._same_signature_state_merging_single_iteration() > 0:
             pass

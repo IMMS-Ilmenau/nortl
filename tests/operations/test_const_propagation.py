@@ -194,3 +194,11 @@ def test_if_then_else(a: Signal, b: Signal) -> None:
     val = IfThenElse(c0 == 1, a, b)
     assert not val.is_constant
     assert val.render() == 'b'
+
+
+def test_and_or_shorting(a: Signal) -> None:
+    assert All(a, ~a).render() == "1'h0"
+    assert All(~a, a).render() == "1'h0"
+
+    assert Any(a, ~a).render() == "1'h1"
+    assert Any(~a, a).render() == "1'h1"

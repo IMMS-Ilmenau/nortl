@@ -99,6 +99,10 @@ class StaticAccessChecker(BaseChecker):
 
         return threadnames
 
+    @property
+    def all_checks_enabled(self) -> bool:
+        return len(self.enabled_checks) == len(self.check_mapping.keys())
+
     def disable_check(self, check: SIGNAL_ACCESS_CHECKS) -> None:
         self.enabled_checks.remove(check)
 

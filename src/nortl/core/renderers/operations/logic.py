@@ -70,9 +70,21 @@ class ExclusiveOr(TwoSideRenderer):
         return f'({self.left} ^ {self.right})'
 
     @staticmethod
-    def eval(left: Operand, right: Operand) -> Optional[int]:
-        """Evaluate operation into constant value."""
-        if (left_ := const_unpack(left)) is not None and (right_ := const_unpack(right)) is not None:
+    def eval(left: Union[T_Left, int, bool], right: Union[T_Right, int, bool]) -> Optional[Union[T_Left, T_Right, int]]:
+        """Evaluate operation into constant value.
+
+        Short circuits for x ^ 0.
+        """
+        left_ = const_unpack(left)
+        right_ = const_unpack(right)
+
+        # Short circuiting: x ^ 0 = x
+        if left_ == 0:
+            return right
+        if right_ == 0:
+            return left
+
+        if left_ is not None and right_ is not None:
             return left_ ^ right_
         return None
 

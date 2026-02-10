@@ -65,6 +65,15 @@ class Any(SequenceRenderer):
         # Short circuiting: all arguments are == 0
         if all(arg is not None and arg == 0 for arg in args_):
             return 0
+
+        # Short circuiting: If "a" and "~a" are in the sequence
+        filtered_args = [arg for arg in args if not isinstance(arg, (int, bool)) and arg is not None]
+
+        rendered_args = [arg.render() for arg in filtered_args]
+        for arg_ in filtered_args:
+            if (~arg_).render() in rendered_args:
+                return 1
+
         return None
 
 
@@ -97,4 +106,13 @@ class All(SequenceRenderer):
         # Short circuiting: all arguments are > 0
         if all(arg is not None and arg > 0 for arg in args_):
             return 1
+
+        # Short circuiting: If "a" and "~a" are in the sequence
+        filtered_args = [arg for arg in args if not isinstance(arg, (int, bool)) and arg is not None]
+
+        rendered_args = [arg.render() for arg in filtered_args]
+        for arg_ in filtered_args:
+            if (~arg_).render() in rendered_args:
+                return 0
+
         return None
