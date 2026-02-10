@@ -14,6 +14,7 @@ from typing import (
     Generator,
     Generic,
     Iterable,
+    List,
     Literal,
     Never,
     Optional,
@@ -727,9 +728,12 @@ class SequenceOperation(ExplicitOperation[SequenceRenderer]):
         super().__init__()
         self._parts = self._extract_args(arg, extra_args)
 
+        # Absorb operations of the same kind into one large operation
+        self._unpack_sequence_operands()
+
     @property
     def parts(self) -> Sequence[Renderable]:
-        """Parts of the concatenation expression."""
+        """Parts of the sequence."""
         return self._parts
 
     @property
@@ -749,6 +753,19 @@ class SequenceOperation(ExplicitOperation[SequenceRenderer]):
             args = (arg, *extra_args)  # type: ignore[arg-type]
 
         return tuple(to_renderable(arg, allow_string_literal=True) for arg in args)
+
+    def _unpack_sequence_operands(self) -> None:
+        """Unpack sequence operands of the same kind."""
+        new_parts: List[Renderable] = []
+        operand_type = type(self)
+
+        for part in self.parts:
+            if isinstance(part, operand_type):
+                new_parts.extend(part.parts)
+            else:
+                new_parts.append(part)
+
+        self._parts = new_parts
 
     def _fold_constants(self) -> None:
         """Fold constants and short-circuit expressions.

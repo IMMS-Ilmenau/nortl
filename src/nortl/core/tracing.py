@@ -193,7 +193,7 @@ class Tracer:
         lines: List[str] = []
         lines.append(f'{target.__class__} {target.name} was created at:')
 
-        for i, frame in enumerate(target.get_metadata(key)):
+        for i, frame in enumerate(target.get_metadata(key)) or ():
             lines.append(f'[{i}] in {frame.filename}:{frame.lineno}')
             lines.extend(f'{line.lstrip().rstrip()}' for line in frame.code_context or ())
         return '\n'.join(lines)

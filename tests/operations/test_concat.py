@@ -91,3 +91,10 @@ def test_generator_expression(engine: CoreEngine) -> None:
     val = Concat(*signals, signals[0])
     assert val.operand_width == 32
     assert val.render() == '{SCRATCH_SIGNAL[7:0], SCRATCH_SIGNAL[15:8], SCRATCH_SIGNAL[23:16], SCRATCH_SIGNAL[7:0]}'
+
+
+def test_unpack_nested_concat(byte: Signal) -> None:
+    """Nested concat operations are unpacked into a single operation."""
+    val = Concat('0b1111', Concat(Const('0b0000'), byte, Const('0b0000')), byte)
+    assert val.operand_width == 28
+    assert val.render() == "{4'hF, 4'h0, byte, 4'h0, byte}"

@@ -43,6 +43,26 @@ def test_any_all_single(a: Signal) -> None:
     assert val.render() == "1'h1"
 
 
+def test_unpack_nested_any_all(a: Signal, b: Signal, c: Signal) -> None:
+    """Nested Any and All operations are unpacked into a single operation."""
+    val: BaseOperation = Any(Any(a, b), c)
+    assert val.operand_width == 1
+    assert val.render() == '(a || b || c)'
+
+    val = All(All(a, b), c)
+    assert val.operand_width == 1
+    assert val.render() == '(a && b && c)'
+
+    # Sequences of different types are not unpacked
+    val = All(Any(a, b), c)
+    assert val.operand_width == 1
+    assert val.render() == '((a || b) && c)'
+
+    val = Any(All(a, b), c)
+    assert val.operand_width == 1
+    assert val.render() == '((a && b) || c)'
+
+
 def test_multibit(byte: Signal, engine: CoreEngine) -> None:
     """Test Any/All operations with multi-bit signals."""
 
