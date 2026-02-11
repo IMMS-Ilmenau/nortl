@@ -907,7 +907,6 @@ class ScratchSignal(_BaseSlice, _AccessControlledSignal):
         ret = 0
 
         for i in range(length):
-            print(f'own: {own_stack[i].code_context}, other: {other_stack[i].code_context}')
             if own_stack[i].code_context == other_stack[i].code_context:
                 ret += 1
 
