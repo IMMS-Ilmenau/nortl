@@ -81,7 +81,7 @@ def enable_tracing(lower_boundary: Union[Path, str] = DEFAULT_BOUNDARY) -> Itera
         lower_boundary = str(lower_boundary)  # Format as platform default
 
     # Determine upper boundary by searching the stack for the invocation of enable_tracing()
-    upper_boundary = '<undefined'
+    upper_boundary = None
     for frame in inspect.stack():
         for line in frame.code_context or ():
             if 'enable_tracing()' in line:
@@ -119,7 +119,7 @@ class Tracer:
     By default, the call stack stops when it reaches any method in the module `nortl.core.engine`.
     """
 
-    upper_boundary: str = '<undefined>'
+    upper_boundary: Optional[str] = None
     """Upper boundary for the filtered call stack.
 
     This frame is the first frame that is included in the filtered stack trace.
@@ -221,11 +221,11 @@ class Tracer:
             Filtered stack trace, containing only the frames within boundaries.
         """
         frames = []
-        hidden = True
+        hidden = self.upper_boundary is not None
         for frame in full_frames:
             if frame.filename.startswith(self.lower_boundary):
                 hidden = True
-            if frame.filename.startswith(self.upper_boundary):
+            if self.upper_boundary is not None and frame.filename.startswith(self.upper_boundary):
                 hidden = False
 
             if not hidden:
