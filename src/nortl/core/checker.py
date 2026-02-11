@@ -1,5 +1,6 @@
+from contextlib import contextmanager
 from logging import getLogger
-from typing import Callable, ClassVar, Dict, List, Literal, Protocol, Set, Type
+from typing import Callable, ClassVar, Dict, Iterator, List, Literal, Protocol, Set, Type
 from warnings import warn
 
 from .exceptions import ExclusiveReadError, ExclusiveWriteError, NonIdenticalRWError
@@ -16,9 +17,12 @@ logger = getLogger(__name__)
 T_SEVERITY_LEVEL = Literal['raise', 'warn', 'log', 'suppress']
 
 
-def set_severity_level(level: T_SEVERITY_LEVEL) -> None:
+@contextmanager
+def set_severity_level(level: T_SEVERITY_LEVEL) -> Iterator[None]:
     """Set severity level for noRTL access checks."""
-    BaseChecker.severity = level
+    old_level, BaseChecker.severity = BaseChecker.severity, level
+    yield
+    BaseChecker.severity = old_level
 
 
 class AccessControlledSignal(Protocol):
