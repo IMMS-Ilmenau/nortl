@@ -123,13 +123,11 @@ class ScratchpadVisualizationRenderer:
 
             retlst.append(f'<td>{statename}</td>')
 
-            first = True
-
+            next_pos = 0
             for item, pos, length in self.scratch_map[statename]:
-                if not first:
-                    first = True
-                    if pos != 0:
-                        retlst.append(f'<td colspan="{pos}"></td>')
+                if next_pos != pos:
+                    retlst.append(f'<td colspan="{pos - next_pos}"></td>')
+                next_pos = pos + length
 
                 frameinfo = ''
                 if show_frameinfo:

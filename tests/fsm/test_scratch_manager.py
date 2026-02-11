@@ -228,3 +228,26 @@ def test_parallel_scratch_access() -> None:
 
     f1.cancel()
     f2.cancel()
+
+
+def test_scratch_signal_disjoint() -> None:
+    engine = CoreEngine('my_engine')
+
+    engine.sync()
+
+    a = engine.define_scratch(2)
+    b = engine.define_scratch(3)
+
+    engine.sync()
+    engine.sync()
+
+    a.release()
+
+    engine.sync()
+    engine.sync()
+
+    c = engine.define_scratch(2)
+    engine.sync()
+
+    assert not a.states_disjoint(b)
+    assert a.states_disjoint(c)

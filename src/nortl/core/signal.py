@@ -880,3 +880,20 @@ class ScratchSignal(_BaseSlice, _AccessControlledSignal):
 
         self._context_ctr_active = False
         self._released = True
+
+    def states_disjoint(self, other: Self) -> bool:
+        """This function calculates if the current scratch signal and the other scratch signal are never active (i.a. non-released) in the same states."""
+
+        def get_active_states(scratch_signal: Self) -> Set[str]:
+            ret = set()
+            for statelst in self.engine.states.values():
+                for state in statelst:
+                    for s in state.active_scratch_signals:
+                        if scratch_signal is s:  # FIXME: Weird containment, scratch_signal in self.active_scratch signals is always True?
+                            ret.add(state.name)
+            return ret
+
+        other_active_states = get_active_states(other)
+        self_active_states = get_active_states(self)
+
+        return len(self_active_states.intersection(other_active_states)) == 0
