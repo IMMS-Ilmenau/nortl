@@ -2,6 +2,7 @@ import pytest
 
 from nortl.core.constructs import Condition, Fork
 from nortl.core.engine import CoreEngine
+from nortl.core.signal import ScratchSignal
 
 
 def test_memory_map_1() -> None:
@@ -251,3 +252,25 @@ def test_scratch_signal_disjoint() -> None:
 
     assert not a.states_disjoint(b)
     assert a.states_disjoint(c)
+
+
+def test_scratch_signal_call_stack_similarity() -> None:
+    engine = CoreEngine('my_engine')
+
+    engine.sync()
+
+    a = engine.define_scratch(2)
+    b = engine.define_scratch(3)
+
+    engine.sync()
+
+    def test() -> ScratchSignal:
+        return engine.define_scratch(3)
+
+    c = test()
+
+    engine.sync()
+
+    assert a.call_stack_similarity(a) == 0
+    assert a.call_stack_similarity(b) == -1
+    assert b.call_stack_similarity(c) == -2

@@ -897,3 +897,20 @@ class ScratchSignal(_BaseSlice, _AccessControlledSignal):
         self_active_states = get_active_states(self)
 
         return len(self_active_states.intersection(other_active_states)) == 0
+
+    def call_stack_similarity(self, other: Self) -> int:
+        own_stack = self.creator_frames
+        other_stack = other.creator_frames
+
+        length = min(len(own_stack), len(other_stack))
+
+        ret = 0
+
+        for i in range(length):
+            print(f'own: {own_stack[i].code_context}, other: {other_stack[i].code_context}')
+            if own_stack[i].code_context == other_stack[i].code_context:
+                ret += 1
+
+        ret = ret - max(len(own_stack), len(other_stack))
+
+        return ret

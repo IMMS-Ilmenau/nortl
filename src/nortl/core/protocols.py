@@ -544,6 +544,10 @@ class ScratchSignalProto(_BaseSliceProto, Protocol):
 
     def release(self, force: bool = False) -> None: ...
 
+    def states_disjoint(self, other: Self) -> bool: ...
+
+    def call_stack_similarity(self, other: Self) -> int: ...
+
 
 # Parameters
 class ParameterProto(Renderable, Protocol):
