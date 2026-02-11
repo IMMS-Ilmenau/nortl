@@ -1,6 +1,27 @@
-from typing import Dict, List, Set
+import re
+from typing import Dict, List, Set, Tuple, Union
 
 from nortl.core.protocols import EngineProto, ScratchSignalProto
+
+
+def sort_by_nat_split(x: str) -> Tuple[Union[int, str], ...]:
+    """Sort string with mix of numbers and text, while preserving natural order of the numbers.
+
+    This works by splitting string into elements and trying to convert everything to integers.
+    """
+    result: List[Union[int, str]] = []
+    for element in re.split(r'([0-9]+)', x):
+        if len(element) == 0:
+            continue
+
+        try:
+            element = int(element)
+        except ValueError:
+            pass
+
+        result.append(element)
+
+    return tuple(result)
 
 
 class ScratchpadVisualizationRenderer:
@@ -16,21 +37,23 @@ class ScratchpadVisualizationRenderer:
 
     def __init__(self, engine: EngineProto, include_modules: bool = True, clock_gating: bool = False):
         self.engine = engine
-        self.scratch_map: Dict[str, List[str]] = {}  # Map state name to list of
+        self.scratch_map: Dict[str, List[Tuple[str, int, int]]] = {}  # Map state name to list of
         self.set_of_labels: Set[str] = set()
         self.list_of_labels: List[str] = []
         self.map_label_to_htmlcolor: Dict[str, str] = {}
 
     def _extract_frame_info(self, source: ScratchSignalProto) -> str:
         frame = source.creator_frames[-1]
-        ret = f'{frame.filename}, {frame.lineno}: {frame.function}'
+        ret = ''
+        for frame in source.creator_frames:
+            ret += f'{frame.filename}, {frame.lineno}: {frame.function}\n'
         return ret
 
     def _generate_map(self) -> None:
         length = self.engine.scratch_manager.scratchpad_width
         for statelist in self.engine.states.values():
             for state in statelist:
-                new_lst = [''] * length
+                new_lst = []
 
                 for scratch_signal in state.active_scratch_signals:
                     if isinstance(scratch_signal.index, slice):
@@ -42,14 +65,13 @@ class ScratchpadVisualizationRenderer:
                         # Include last bit in range
                         bits[1] += 1
 
-                        for idx in range(*bits):
-                            new_lst[idx] = self._extract_frame_info(scratch_signal)
+                        new_lst.append((self._extract_frame_info(scratch_signal), bits[0], bits[1] - bits[0]))
                     else:
-                        new_lst[scratch_signal.index] = self._extract_frame_info(scratch_signal)
+                        new_lst.append((self._extract_frame_info(scratch_signal), scratch_signal.index, 1))
 
                     self.set_of_labels.add(self._extract_frame_info(scratch_signal))
 
-                self.scratch_map[state.name] = new_lst
+                self.scratch_map[state.name] = sorted(new_lst, key=lambda x: x[1])
 
     def generate_colors(self, n: int) -> List[str]:
         """Creats n different colors that should actually look different."""
@@ -81,7 +103,7 @@ class ScratchpadVisualizationRenderer:
         return colors
 
     def _create_metadata(self) -> None:
-        self.list_of_labels = sorted(list(self.set_of_labels))
+        self.list_of_labels = list(self.set_of_labels)
         for label, colorstr in zip(self.list_of_labels, self.generate_colors(len(self.list_of_labels))):
             self.map_label_to_htmlcolor[label] = colorstr
 
@@ -91,18 +113,30 @@ class ScratchpadVisualizationRenderer:
         self._create_metadata()
 
         retlst = ['<table>']
-        for statename in sorted(list(self.scratch_map.keys())):
+
+        retlst.append('<tr>')
+        retlst.extend(['<td></td>' for _ in range(self.engine.scratch_manager.scratchpad_width + 1)])
+        retlst.append('</tr>')
+
+        for statename in sorted(list(self.scratch_map.keys()), key=lambda x: sort_by_nat_split(x)):
             retlst.append('<tr>')
 
             retlst.append(f'<td>{statename}</td>')
 
-            for item in self.scratch_map[statename]:
+            first = True
+
+            for item, pos, length in self.scratch_map[statename]:
+                if not first:
+                    first = True
+                    if pos != 0:
+                        retlst.append(f'<td colspan="{pos}"></td>')
+
                 frameinfo = ''
                 if show_frameinfo:
                     frameinfo = item
 
                 if item != '':
-                    retlst.append(f'<td style="background-color: {self.map_label_to_htmlcolor[item]}">{frameinfo}</td>')
+                    retlst.append(f'<td style="background-color: {self.map_label_to_htmlcolor[item]}" colspan="{length}">{frameinfo}</td>')
                 else:
                     retlst.append('<td></td>')
 
