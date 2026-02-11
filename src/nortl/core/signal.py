@@ -762,6 +762,9 @@ class ScratchSignal(_BaseSlice, _AccessControlledSignal):
         self._context_ctr: int = 0
         self._context_ctr_active: bool = True
 
+        # Remember, where the scratch signal was created
+        self.creator_frames = self.engine.tracer.current_trace
+
     @property
     def owner(self) -> ThreadProto:
         """Owner of this scratch signal."""

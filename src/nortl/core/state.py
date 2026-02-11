@@ -55,6 +55,9 @@ class State(NamedEntity):
         # Store stack trace at point of creation
         self.engine.tracer.add_metadata(self, 'stack@creation', profile=True)
 
+        # Store all currently active scratch signals for later scratch pad optimization
+        self.active_scratch_signals = [s for s in self.engine.scratch_manager.scratch_signals if not s.released]
+
     @property
     def engine(self) -> EngineProto:
         """Engine that this state belongs to."""

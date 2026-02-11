@@ -178,6 +178,12 @@ class Tracer:
             if self._session is not None and profile:
                 self._session.append(full_frames)
 
+    @property
+    def current_trace(self) -> Sequence[FrameInfo]:
+        full_frames = self._create_trace()
+        frames = self._filter_trace(full_frames)
+        return frames
+
     def format_metadata(self, target: NamedEntityProto, key: str) -> str:
         """Format the stack trace saved in the metadata of a target into a string.
 

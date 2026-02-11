@@ -1,3 +1,4 @@
+from inspect import FrameInfo
 from types import TracebackType
 from typing import Any, ClassVar, Deque, Dict, Generic, List, Literal, Mapping, Optional, Protocol, Sequence, Set, Tuple, Type, TypeVar, Union
 
@@ -181,6 +182,8 @@ class StateProto(NamedEntityProto, Protocol):
     _prints: List[Tuple[str, Tuple[Renderable, ...]]]
     _printfs: Dict[str, List[Tuple[str, Tuple[Renderable, ...]]]]
 
+    active_scratch_signals: List['ScratchSignalProto']
+
     @property
     def engine(self) -> 'EngineProto': ...
 
@@ -222,6 +225,7 @@ class StateProto(NamedEntityProto, Protocol):
 class ScratchManagerProto(Protocol):
     engine: 'EngineProto'
     scratch_signals: Deque['ScratchSignalProto']
+    scratchpad_width: int
 
     @property
     def scratchpad(self) -> 'SignalProto': ...
@@ -522,6 +526,8 @@ class SignalSliceProto(_BaseSliceProto, _EventSourceSignalProto['SignalSliceProt
 
 
 class ScratchSignalProto(_BaseSliceProto, Protocol):
+    creator_frames: Sequence[FrameInfo]
+
     @property
     def owner(self) -> 'ThreadProto': ...
 
@@ -645,3 +651,6 @@ class TracerProto(Protocol):
     def add_metadata(self, target: NamedEntityProto, key: str, profile: bool = False) -> None: ...
 
     def format_metadata(self, target: NamedEntityProto, key: str) -> str: ...
+
+    @property
+    def current_trace(self) -> Sequence[FrameInfo]: ...
