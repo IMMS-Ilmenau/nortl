@@ -14,6 +14,19 @@ def test_scratch_release_after_condition_context() -> None:
     assert test.released, 'Scratch signal should be released after exiting Condition context'
 
 
+def test_scratch_release_after_scratch_context() -> None:
+    """Test that a scratch signal created in a context is released after exiting."""
+    engine = Engine('my_engine')
+    engine.sync()
+
+    with engine.context():
+        test = engine.define_scratch(4)
+        engine.set(test, 1)
+
+    # The scratch signal should be released after exiting the context
+    assert test.released, 'Scratch signal should be released after exiting context'
+
+
 def test_scratch_release_after_else_condition_context() -> None:
     """Test that a scratch signal created in an ElseCondition context is released after exiting."""
     engine = Engine('my_engine')

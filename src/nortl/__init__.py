@@ -1,6 +1,7 @@
 """noRTL Code Generation Engine."""
 
-from typing import Union
+from contextlib import contextmanager
+from typing import Iterator, Union
 
 from nortl import verilog_library
 from nortl.algorithms import ReachabilityAnalysisMixin, ScratchReorderingMixin, StateMergerMixin
@@ -72,7 +73,18 @@ class ConstructsMixin(CoreEngine):
         return WhileLoop(self, condition)
 
 
-class Engine(ComponentsMixin, ConstructsMixin, ReachabilityAnalysisMixin, ScratchReorderingMixin, StateMergerMixin, CoreEngine):
+class ManagementMixin(CoreEngine):
+    """Mixin Class that provides context managers with convenience functions."""
+
+    @contextmanager
+    def context(self) -> Iterator[None]:
+        """Creates an empty context for scoping scratch variables."""
+        self.scratch_manager.enter_context()
+        yield
+        self.scratch_manager.exit_context()
+
+
+class Engine(ComponentsMixin, ConstructsMixin, ManagementMixin, ReachabilityAnalysisMixin, ScratchReorderingMixin, StateMergerMixin, CoreEngine):
     """noRTL Engine."""
 
     def __init__(self, module_name: str, reset_state_name: str = 'IDLE') -> None:
