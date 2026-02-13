@@ -32,7 +32,18 @@ class NoRTLTestBase(ABC):
 
     @abstractmethod
     def init_sequence(self) -> CoreEngine:
-        """This function must initialize the engine that is to be tested. In the most trivial case, this means, that an instance of CoreEngine is created.
+        """Initializes the engine that is to be tested.
+
+        Its intention is to create and configure an instance of the Engine that will be tested.
+
+        Example:
+        ```python
+        class MyTest(NoRTLTestBase):
+            def init_sequence(self) -> CoreEngine:
+                engine = CoreEngine("my_test_engine")
+                output = engine.define_output("result", width=8)
+                return engine
+        ```
 
         Returns:
             CoreEngine: Initialized engine
@@ -40,11 +51,20 @@ class NoRTLTestBase(ABC):
         pass
 
     def verify_final_state(self, engine: CoreEngine) -> None:
-        """This state-sequence is called after the dut and testbench threads have ended. It can be used to verify the final state of the dut."""
+        """Verifies the final state of the engine after simulation.
+
+        This state-sequence is called after the dut and testbench threads have ended.
+        It can be used to verify the final state of the dut.
+
+        Arguments:
+            engine (CoreEngine): The engine instance to verify
+        """
         pass
 
     def the_testbench(self, engine: CoreEngine) -> None:
-        """The state sequence that is run in parallel to the engine-under-Test. This may use the self.assert* functions to verify the behavior.
+        """The state sequence that is run in parallel to the engine-under-Test.
+
+        This may use the self.assert* functions to verify the behavior.
 
         Arguments:
             engine (CoreEngine): engine instance
@@ -53,9 +73,13 @@ class NoRTLTestBase(ABC):
 
     @abstractmethod
     def dut(self, engine: CoreEngine) -> None:
-        """The dut function is the state sequence that is to be tested. It is executed in parallel to the testbench.
+        """The dut function is the state sequence that is to be tested.
 
-        A call to self.assert* is not forbidden but not advised to create a good seperation between dut and test code.
+        It is executed in parallel to the testbench. A call to self.assert* is not forbidden
+        but not advised to create a good separation between dut and test code.
+
+        Arguments:
+            engine (CoreEngine): The engine instance
         """
         pass
 
@@ -115,6 +139,14 @@ class NoRTLTestBase(ABC):
         self.engine.sync()
 
     def finish_simulation(self) -> None:
+        """Finalizes the simulation by setting flags.
+
+        This method sets the state and finish flags based on the error counter.
+        If no errors occurred, the state flag is set to 1 (passed), otherwise 0 (failed).
+
+        Arguments:
+            None
+        """
         self.engine.sync()
 
         with Condition(self.engine, self.error_ctr == 0):
@@ -126,6 +158,14 @@ class NoRTLTestBase(ABC):
         self.engine.sync()
 
     def print_line(self, frame: FrameType) -> None:
+        """Prints an assertion failure message with context.
+
+        Extracts the source code line where the assertion failed and prints it
+        along with the file and line number.
+
+        Arguments:
+            frame (FrameType): The frame object containing the code context
+        """
         fi = getframeinfo(frame)
         if fi.code_context is None:
             return
@@ -135,6 +175,18 @@ class NoRTLTestBase(ABC):
         self.engine.print(f'Assertion \\"{code_context}\\" failed at {fi.filename}:{frame.f_lineno}')
 
     def assertTrue(self, condition: Renderable | int) -> None:  # noqa: N802
+        """Asserts that a condition is true.
+
+        If the condition is false, prints the assertion line and fails the simulation.
+
+        Example:
+        ```python
+        self.assertTrue(output_signal == 5)
+        ```
+
+        Arguments:
+            condition (Renderable | int): The condition to assert as true
+        """
         if isinstance(condition, int):
             condition = Const(condition, 1)
 
@@ -151,6 +203,19 @@ class NoRTLTestBase(ABC):
         self.engine.sync()
 
     def assertEqual(self, value1: Renderable | int, value2: Renderable | int) -> None:  # noqa: N802
+        """Asserts that two values are equal.
+
+        If the values are not equal, prints both values from within the simulation and fails the simulation.
+
+        Example:
+        ```python
+        self.assertEqual(output_signal, expected_value)
+        ```
+
+        Arguments:
+            value1 (Renderable | int): The first value to compare
+            value2 (Renderable | int): The second value to compare
+        """
         with Condition(self.engine, UnregisteredRead(to_renderable(value1) != to_renderable(value2))):
             frame = currentframe()
             if frame is not None:
@@ -167,14 +232,16 @@ class NoRTLTestBase(ABC):
         self.engine.sync()
 
     def test_compile_and_run(self) -> None:
-        """Automatically executed fixture.
+        """Automatically executed test method.
 
-        Process:
-        1. Builds the engine
-        2. Generates and compiles Verilog
+        This method runs before each test and performs the following steps:
+
+        1. Builds the engine by calling init_sequence()
+        2. Generates and compiles Verilog files
         3. Runs the simulation
         4. Makes results available to test methods
 
+        The method raises pytest.fail if the simulation fails.
         """
         # Create engine from derived class
         self.engine = self.get_test_engine()
@@ -215,7 +282,13 @@ class NoRTLTestBase(ABC):
                 pytest.fail('Verilog simulation discovered errors')
 
     def _run_simulation(self) -> None:
-        """Internal method to execute the simulation."""
+        """Executes the compiled Verilog simulation.
+
+        This internal method runs the simulation using the vvp simulator.
+
+        Arguments:
+            None
+        """
         cmd = ['vvp', str(self.compiled_file)]
 
         self.simulation_result = subprocess.run(cmd, capture_output=True, text=True)
