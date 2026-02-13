@@ -22,10 +22,10 @@ class ForLoop:
 
         Example:
         ```python
-        engine = CoreEngine("my_engine")
+        engine = Engine("my_engine")
         out = engine.define_output("test_output", width=8)
 
-        with ForLoop(engine, 0, 100, 2) as i:
+        with engine.for_loop(0, 100, 2) as i: # This returns the ForLoop(engine,...) context manager
             # code that should be run multiple times
             engine.set(out, i)
         ```

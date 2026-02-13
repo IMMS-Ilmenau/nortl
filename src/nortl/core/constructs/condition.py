@@ -28,22 +28,23 @@ class Condition:
         * If we get to realize the second conditional, we recognize that from the metadata of the current state
             * The start and final state are adapted to resemble the behavior of the first conditional
 
+        Finally, this context manager will be made usable with a mixin in the main Engine class using `engine.condition(condition: Renderable)`.
+
         The Context manager can be used as follows:
         ```python
-        from nortl.core import CoreEngine
-        from nortl.utils.context_manager import Condition
+        from nortl import Engine
 
-        f = CoreEngine('my_engine')
+        f = Engine('my_engine')
         in_signal = f.define_input('IN')
 
         # Example usage:
         # <= We start at a start_state
-        with Condition(f, in_signal == 1):
+        with engine.condition(in_signal == 1):
             f.sync()
             f.do_something()
             # At the end, the engine goes to an inferred final_state
 
-        with Condition(f, in_signal == 0):
+        with engine.condition(in_signal == 0):
             #The context manager again starts from the same start_state as before
             f.sync()
             f.do_something_else()
@@ -113,20 +114,19 @@ class ElseCondition(Condition):
 
     Usage example:
 
-        from nortl.core import CoreEngine
-        from nortl.utils.context_manager import Condition, ElseCondition
+        from nortl import CoreEngine
 
-        f = CoreEngine('my_engine')
+        f = Engine('my_engine')
         in_signal = f.define_input('IN')
 
-        with Condition(f, in_signal == 1):
+        with engine.condition(in_signal == 1):
             f.sync()
             f.do_something()
-        with Condition(f, possible_second_condition):
+        with engine.condition(possible_second_condition):
             f.sync()
             f.do_something()
 
-        with ElseCondition(f):
+        with engine.else_condition():
             f.do_something_else()
 
 
