@@ -1,4 +1,4 @@
-from typing import List, Sequence, Set, Tuple
+from typing import List, Set, Tuple
 
 from nortl.core.engine import CoreEngine
 from nortl.core.protocols import ScratchSignalProto
@@ -23,32 +23,47 @@ def get_scratch_signal_group(start_signal: ScratchSignalProto, universe: List[Sc
     return maximum_similarity, [s for s in reduced_universe if start_signal.call_stack_similarity(s) == maximum_similarity] + [start_signal]
 
 
+def index_overlap(signal1: ScratchSignalProto, signal2: ScratchSignalProto) -> bool:
+    if isinstance(signal1.index, int) and isinstance(signal2.index, int):
+        return signal1.index == signal2.index
+    elif isinstance(signal1.index, int) and not isinstance(signal2.index, int):
+        return signal1.index >= signal2.index.start and signal1.index <= signal2.index.stop  # type:ignore
+    elif isinstance(signal2.index, int) and not isinstance(signal1.index, int):
+        return signal2.index >= signal1.index.start and signal2.index <= signal1.index.stop  # type:ignore
+    else:
+        ret = signal1.index.start >= signal2.index.start and signal1.index.start <= signal2.index.stop  # type:ignore
+        ret = ret or (signal1.index.stop >= signal2.index.start and signal1.index.stop <= signal2.index.stop)  # type:ignore
+        return ret
+
+
 def overlaps(signal1: ScratchSignalProto, signal2: ScratchSignalProto) -> bool:
     """Are the given two signals active in same states and overlap in scratch map?"""
     # FIXME: Maybe move this method to scratch_manager to provide a consistency check.
 
-    if signal1.states_disjoint(signal2):
-        return False
-
-    bits_signal_1: Sequence[int] = []
-    bits_signal_2: Sequence[int] = []
-
-    if isinstance(signal1.index, int):
-        bits_signal_1 = [signal1.index]
-    else:
-        # FIXME: Replace by dynamic value later, 1e6 should catch most scenarios for now
-        bits_signal_1 = range(*list(signal1.index.indices(int(1e6))))
-
-    if isinstance(signal2.index, int):
-        bits_signal_2 = [signal2.index]
-    else:
-        bits_signal_2 = range(*list(signal2.index.indices(int(1e6))))
-
-    for idx1 in bits_signal_1:
-        if idx1 in bits_signal_2:
-            return True
+    if index_overlap(signal1, signal2):
+        return not signal1.states_disjoint(signal2)
 
     return False
+
+
+def group_by_disjoint(input_list: List[ScratchSignalProto]) -> List[List[ScratchSignalProto]]:
+    if len(input_list) == 0:
+        return []
+
+    first_element = input_list.pop()
+    ret = [first_element]
+
+    leftovers = []
+    for element in input_list:
+        if first_element.states_disjoint(element):
+            ret.append(element)
+        else:
+            leftovers.append(element)
+
+    if leftovers == []:
+        return [ret]
+    else:
+        return [ret, *group_by_disjoint(leftovers)]
 
 
 class ScratchReorderingMixin(CoreEngine):
@@ -58,12 +73,12 @@ class ScratchReorderingMixin(CoreEngine):
     and their use in the states
     """
 
-    def _try_relocate_scratch_signal(self, scratch_signal: ScratchSignalProto, new_start: int) -> bool:
+    def _relocate_scratch_signal(self, scratch_signal: ScratchSignalProto, new_start: int, dry_run: bool = False) -> bool:
         """Try to place a scratchsignal at a new location of the scratch pad. Returns True if succeeded and resizes the scratchpad if needed."""
         if not isinstance(scratch_signal.width, int):
             raise RuntimeError('Scratch signal width must always be integer and cannot be a Renderable!')
 
-        if scratch_signal.width != 0:
+        if scratch_signal.width > 1:
             new_pos: IntSlice | int = slice(new_start, new_start + scratch_signal.width)
         else:
             new_pos = new_start
@@ -72,12 +87,17 @@ class ScratchReorderingMixin(CoreEngine):
 
         # Relocate
         # The type:ignore is used since the _index should never be set by the user or exposed!
-        scratch_signal._index = new_pos  # type:ignore
-        # Test if we now overlap with someone
 
-        if any([overlaps(scratch_signal, s) for s in self.scratch_manager.scratch_signals if s is not scratch_signal]):
+        scratch_signal._index = new_pos  # type:ignore
+
+        # Test if we now overlap with someone
+        if any(overlaps(scratch_signal, s) for s in self.scratch_manager.scratch_signals if s is not scratch_signal):
             scratch_signal._index = old_pos  # type:ignore
             return False
+
+        if dry_run:
+            scratch_signal._index = old_pos  # type:ignore
+            return True
 
         # Resize scratchpad if needed
         if new_start + scratch_signal.width > self.scratch_manager.scratchpad_width:
@@ -85,25 +105,37 @@ class ScratchReorderingMixin(CoreEngine):
 
         return True
 
-    def _place_group(self, group: List[ScratchSignalProto], start_offset: int) -> None:
+    def _relocate_group(self, signallist: List[ScratchSignalProto], new_start: int, dry_run: bool) -> bool:
+        return all([self._relocate_scratch_signal(s, new_start, dry_run) for s in signallist])
+
+    def _place_list_of_signals(self, signallist: List[ScratchSignalProto], start_offset: int) -> None:
         # Assume all signals in the group have same width.
-        if any([not isinstance(s.width, int) for s in group]):
+        if any([not isinstance(s.width, int) for s in signallist]):
             raise RuntimeError('Scratch signal width must always be integer and cannot be a Renderable!')
 
-        width: int = group[0].width  # type:ignore
+        width: int = signallist[0].width  # type:ignore
 
-        if any([s.width != width for s in group]):
+        if any([s.width != width for s in signallist]):
             raise RuntimeError('Signals in group must all have the same width!')
 
-        for signal in group:
+        # group singals by overlaps
+
+        grouping = group_by_disjoint(signallist)
+        for group in grouping:
             k = 0
-            while not self._try_relocate_scratch_signal(signal, start_offset + k * width):
+            while not self._relocate_group(group, start_offset + k, dry_run=True):
                 k = k + 1
+
+            self._relocate_group(group, start_offset + k, dry_run=False)
 
     def scratch_reordering(self) -> None:
         universe = [s for s in self.scratch_manager.scratch_signals]
 
-        start_offset = self.scratch_manager.scratchpad_width
+        # enable caching of active state data  in the scratch signals
+        for s in universe:
+            s.set_metadata('cache_active_state_enabled', True)  # type:ignore
+
+        start_offset = self.scratch_manager.scratchpad_width + 1
 
         while universe != []:
             scratch_widths: Set[int] = set([s.width for s in universe])  # type:ignore
@@ -114,7 +146,7 @@ class ScratchReorderingMixin(CoreEngine):
 
             _, group_to_place = similarity_groups[0]
 
-            self._place_group(group_to_place, start_offset)
+            self._place_list_of_signals(group_to_place, start_offset)
 
             new_universe = []
             for s in universe:
@@ -128,11 +160,13 @@ class ScratchReorderingMixin(CoreEngine):
 
             universe = new_universe
 
+            print(f'universe size {len(universe)}, current width = {max(scratch_widths)}')
+
         # Now shift all signals to the beginning of the scratch pad
         for s in self.scratch_manager.scratch_signals:
             if isinstance(s.index, int):
                 pos = s.index
             else:
-                pos = min(range(*s.index.indices(int(1e6))))
+                pos = min(s.index.start, s.index.stop)  # type:ignore
 
-            self._try_relocate_scratch_signal(s, pos - start_offset)
+            self._relocate_scratch_signal(s, pos - start_offset)

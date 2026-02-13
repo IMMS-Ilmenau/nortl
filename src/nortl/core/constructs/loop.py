@@ -93,15 +93,31 @@ class ForLoop:
 
 
 class WhileLoop:
-    """Context manager to realize a While loop within a noRTL engine."""
+    """Context manager to realize a while-loop within a noRTL engine.
+
+    Its intention is to emulate the behavior of a while loop in an engine.
+
+    Example:
+    ```python
+    engine = Engine("my_engine")
+    out = engine.define_output("test_output", width=8)
+
+    with engine.while_loop(out < 4) as _:  # This returns the WhileLoop(engine,...) context manager
+        # code that should be run while the condition is true
+        engine.set(out, out + 1)
+    ```
+
+    The context manager handles the state transitions for the loop.
+    Make sure to modify the condition variables within the loop body to eventually make the condition false,
+    otherwise the loop will run indefinitely.
+
+    Arguments:
+        engine: The CoreEngine instance.
+        condition: A signal or expression representing the condition of the while loop.
+    """
 
     def __init__(self, engine: EngineProto, condition: Renderable) -> None:
-        """Initializes a While construct.
-
-        Arguments:
-            engine: The CoreEngine instance.
-            condition: The condition of the while loop.
-        """
+        """Initializes a While construct."""
         self.engine = engine
         self.condition = to_renderable(condition)
 

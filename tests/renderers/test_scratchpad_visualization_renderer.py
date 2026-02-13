@@ -36,3 +36,28 @@ def test_simple_rendering() -> None:
 
     with open((Path(__file__).parent / 'artifacts') / 'out.md', 'w') as file:
         file.write(renderer.render())
+
+
+def test_simple_rendering_2() -> None:
+    # Some whatever engine
+    engine = Engine('my_engine')
+    engine.tracer.upper_boundary = str(Path(__file__))
+
+    _ = engine.define_input('IN')
+    engine.sync()
+    local_cnt = engine.define_scratch(4)
+    engine.set(local_cnt, 1)
+    _ = engine.define_scratch(2)
+    engine.sync()
+    engine.sync()
+    local_cnt.release()
+    engine.sync()
+
+    _ = engine.define_scratch(2)
+
+    engine.sync()
+
+    renderer = ScratchpadVisualizationRenderer(engine)
+
+    with open((Path(__file__).parent / 'artifacts') / 'out2.md', 'w') as file:
+        file.write(renderer.render())

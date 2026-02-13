@@ -9,7 +9,36 @@ __all__ = [
 
 
 class Fork:
-    """Context manager to realize a Fork."""
+    """Context manager to realize a fork-join parallelism pattern within a noRTL engine.
+
+    Its intention is to spawn a new thread that runs concurrently with the main thread.
+    The fork creates a new worker (if no free worker is available) and a new thread within that worker.
+
+    Example:
+    ```python
+    engine = Engine("my_engine")
+    out = engine.define_output("test_output", width=8)
+
+    with engine.fork("spawned_thread") as spawned_thread:
+        # Code that should run in parallel
+        engine.set(out, 42)
+        engine.sync()
+
+    # After the fork, the main thread continues while the spawned process is running.
+    engine.sync()
+
+    # Join the spawned thread to wait for its completion
+    spawned_thread.join()
+    ```
+
+    The context manager handles the state transitions and worker allocation for the spawned thread.
+    It also manages the signal access permissions to ensure proper synchronization between the
+    spawning and spawned threads.
+
+    Arguments:
+        engine: The CoreEngine instance.
+        threadname: Name of the new thread, optional
+    """
 
     def __init__(self, engine: EngineProto, threadname: str):
         """Initializes the Fork context manager.

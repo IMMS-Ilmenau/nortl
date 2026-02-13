@@ -2,6 +2,7 @@
 
 from abc import ABCMeta, abstractmethod
 from collections import OrderedDict
+from inspect import FrameInfo
 from types import TracebackType
 from typing import Dict, Final, Generic, Literal, Mapping, Optional, Sequence, Set, Tuple, Type, TypeVar, Union
 
@@ -881,35 +882,44 @@ class ScratchSignal(_BaseSlice, _AccessControlledSignal):
         self._context_ctr_active = False
         self._released = True
 
+    @property
+    def _active_states(self) -> Set[str]:
+        if self.has_metadata('cache_active_state_enabled'):
+            if self.get_metadata('cache_active_state_enabled') and self.has_metadata('cache_active_state_data'):
+                return self.get_metadata('cache_active_state_data')  # type: ignore
+
+        ret = set()
+        for statelst in self.engine.states.values():
+            for state in statelst:
+                for s in state.active_scratch_signals:
+                    if self is s:  # FIXME: Weird containment, scratch_signal in self.active_scratch signals is always True?
+                        ret.add(state.name)
+
+        if self.has_metadata('cache_active_state_enabled'):
+            if self.get_metadata('cache_active_state_enabled'):
+                self.set_metadata('cache_active_state_data', ret)
+        return ret
+
     def states_disjoint(self, other: Self) -> bool:
         """This function calculates if the current scratch signal and the other scratch signal are never active (i.a. non-released) in the same states."""
 
-        def get_active_states(scratch_signal: Self) -> Set[str]:
-            ret = set()
-            for statelst in self.engine.states.values():
-                for state in statelst:
-                    for s in state.active_scratch_signals:
-                        if scratch_signal is s:  # FIXME: Weird containment, scratch_signal in self.active_scratch signals is always True?
-                            ret.add(state.name)
-            return ret
+        other_active_states = other._active_states
+        self_active_states = self._active_states
 
-        other_active_states = get_active_states(other)
-        self_active_states = get_active_states(self)
-
-        return len(self_active_states.intersection(other_active_states)) == 0
+        return self_active_states.isdisjoint(other_active_states)
 
     def call_stack_similarity(self, other: Self) -> int:
         own_stack = self.creator_frames
         other_stack = other.creator_frames
 
-        length = min(len(own_stack), len(other_stack))
+        def frameinfo(frame: FrameInfo) -> str:
+            return f'{frame.filename}, {frame.lineno}: {frame.function} {frame.code_context}\n'
 
-        ret = 0
+        if frameinfo(own_stack[-1]) != frameinfo(other_stack[-1]):
+            return 1
+        else:
+            return -1
 
-        for i in range(length):
-            if own_stack[i].code_context == other_stack[i].code_context:
-                ret += 1
-
-        ret = ret - max(len(own_stack), len(other_stack))
-
-        return ret
+    def _creator_frameinfo(self) -> str:
+        frame = self.creator_frames[-1]
+        return f'{frame.filename}, {frame.lineno}: {frame.function} {frame.code_context}\n'

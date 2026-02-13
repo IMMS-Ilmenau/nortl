@@ -43,9 +43,8 @@ class ScratchpadVisualizationRenderer:
         self.map_label_to_htmlcolor: Dict[str, str] = {}
 
     def _extract_frame_info(self, source: ScratchSignalProto) -> str:
-        ret = ''
-        for frame in source.creator_frames:
-            ret += f'{frame.filename}, {frame.lineno}: {frame.function}\n'
+        frame = source.creator_frames[-1]
+        ret = f'{frame.filename}, {frame.lineno}: {frame.function}\n'
         return ret
 
     def _generate_map(self) -> None:
