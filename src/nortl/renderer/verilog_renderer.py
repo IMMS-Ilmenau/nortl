@@ -3,7 +3,7 @@ from typing import List
 from nortl.core.protocols import EngineProto
 
 from .verilog_utils.process import AlwaysComb, AlwaysFF, VerilogAssignment, VerilogCase, VerilogIf, VerilogPrint, VerilogPrintf
-from .verilog_utils.structural import VerilogDeclaration, VerilogModule
+from .verilog_utils.structural import VerilogDeclaration, VerilogModule, VerilogPortDeclaration
 
 # FIXME: Make empty blocks being not rendered at all.
 
@@ -157,8 +157,8 @@ class VerilogRenderer:
                 self.verilog_module.parameters[param.name] = param.default_value
 
         # Signals and Ports
-        self.verilog_module.ports.append(VerilogDeclaration('input logic', 'CLK_I'))
-        self.verilog_module.ports.append(VerilogDeclaration('input logic', 'RST_ASYNC_I'))
+        self.verilog_module.ports.append(VerilogPortDeclaration('input logic', 'CLK_I'))
+        self.verilog_module.ports.append(VerilogPortDeclaration('input logic', 'RST_ASYNC_I'))
 
         for name, signal in self.engine.signals.items():
             if signal.type == 'local':
@@ -166,10 +166,10 @@ class VerilogRenderer:
                 self.verilog_module.signals.append(verilog_signal)
             else:
                 if signal.data_type in ['reg', 'wire', 'logic']:
-                    verilog_signal = VerilogDeclaration(f'{signal.type} {signal.data_type}', name, signal.width)
+                    port_declaration = VerilogPortDeclaration(f'{signal.type} {signal.data_type}', name, signal.width)
                 else:
-                    verilog_signal = VerilogDeclaration(signal.data_type, name, width=signal.width)
-                self.verilog_module.ports.append(verilog_signal)
+                    port_declaration = VerilogPortDeclaration(signal.data_type, name, width=signal.width)
+                self.verilog_module.ports.append(port_declaration)
 
     def create_state_enum(self) -> None:
         """Creates the Verilog state enumeration.

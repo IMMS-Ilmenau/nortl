@@ -4,6 +4,29 @@ from .formatter import VerilogFormatter
 from .utils import VerilogRenderable
 
 
+class VerilogPortDeclaration:
+    def __init__(self, verilog_type: str, name: Union[str, List[str]], width: Union[int, str, VerilogRenderable] = 0) -> None:
+        self.verilog_type = verilog_type
+        self.name = name
+        self.width = width
+
+    def render(self) -> str:
+        parts: List[str] = []
+        parts.append(self.verilog_type)
+
+        if isinstance(self.width, int):
+            if self.width > 1:
+                parts.append(f'[{self.width - 1}:0]')
+        else:
+            parts.append(f'[{self.width}-1:0]')
+
+        if isinstance(self.name, list):
+            parts.append(', '.join(self.name))
+        else:
+            parts.append(self.name)
+        return ' '.join(parts)
+
+
 class VerilogDeclaration:
     def __init__(
         self,
@@ -13,7 +36,7 @@ class VerilogDeclaration:
         connections: Optional[Dict[str, str]] = None,
         params: Optional[Dict[str, str]] = None,
         members: Optional[Union[List[str], Dict[str, int]]] = None,
-    ):
+    ) -> None:
         self.verilog_type = verilog_type
         self.name = name
         self.connections = connections
@@ -104,7 +127,7 @@ class VerilogDeclaration:
 class VerilogModule:
     def __init__(self, name: str) -> None:
         self.name = name
-        self.ports: List[VerilogDeclaration] = []
+        self.ports: List[VerilogPortDeclaration] = []
         self.parameters: Dict[str, Optional[Union[int, str]]] = {}
         self.signals: List[VerilogDeclaration] = []
         self.instances: List[VerilogDeclaration] = []
