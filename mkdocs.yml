@@ -10,6 +10,7 @@ nav:
   - User Guide:
     - Installation: user_guide/installation.md
     - Engine: user_guide/engine.md
+    - Data Model: user_guide/data_model.md
   - Code Reference: reference/
   # TODO Add new sections to the documentation here
 

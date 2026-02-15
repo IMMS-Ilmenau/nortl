@@ -94,7 +94,6 @@ class NoRTLTestBase(ABC):
 
         self.engine.sync()
 
-        # FIXME: Introduce Timeout-timer
         with Fork(self.engine, 'DUT') as t_dut:
             self.dut(self.engine)
         with Fork(self.engine, 'testbench') as t_tb:
@@ -143,9 +142,6 @@ class NoRTLTestBase(ABC):
 
         This method sets the state and finish flags based on the error counter.
         If no errors occurred, the state flag is set to 1 (passed), otherwise 0 (failed).
-
-        Arguments:
-            None
         """
         self.engine.sync()
 
