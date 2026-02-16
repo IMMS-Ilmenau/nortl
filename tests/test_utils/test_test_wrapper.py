@@ -5,7 +5,7 @@ from nortl.core.operations import Const
 from nortl.utils.test_wrapper import NoRTLTestBase
 
 
-class TestTheTestWrapper(NoRTLTestBase):
+class TestTheTestWrapper(NoRTLTestBase[CoreEngine]):
     def init_sequence(self) -> Engine:
         f = Engine('my_engine')
         f.define_local('testreg', 4, 0)
@@ -19,7 +19,7 @@ class TestTheTestWrapper(NoRTLTestBase):
         self.assertTrue(engine.signals['testreg'] == 5)
 
 
-class TestTheTestWrapperWithTB(NoRTLTestBase):
+class TestTheTestWrapperWithTB(NoRTLTestBase[CoreEngine]):
     def init_sequence(self) -> Engine:
         f = Engine('my_engine')
         f.define_local('testreg', 4, 0)
@@ -40,7 +40,7 @@ class TestTheTestWrapperWithTB(NoRTLTestBase):
         self.assertTrue(engine.signals['testreg'] == 5)
 
 
-class TestTheTestWrapperWithTimeout(NoRTLTestBase):
+class TestTheTestWrapperWithTimeout(NoRTLTestBase[CoreEngine]):
     def init_sequence(self) -> Engine:
         self.expect_timeout = 1
 

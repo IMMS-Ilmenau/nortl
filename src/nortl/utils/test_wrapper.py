@@ -8,15 +8,15 @@ from types import FrameType
 
 import pytest
 
-from nortl.core import Const, CoreEngine
+from nortl.core import Const
 from nortl.core.constructs import Condition, ElseCondition, Fork
 from nortl.core.modifiers import UnregisteredRead
 from nortl.core.operations import to_renderable
-from nortl.core.protocols import Renderable
+from nortl.core.protocols import EngineProto, Renderable
 from nortl.renderer.verilog_renderer import VerilogRenderer
 
 
-class NoRTLTestBase(ABC):
+class NoRTLTestBase[T: EngineProto](ABC):
     """Base class for noRTL tests with Verilog simulation.
 
     Subclasses must implement:
@@ -31,7 +31,7 @@ class NoRTLTestBase(ABC):
     """
 
     @abstractmethod
-    def init_sequence(self) -> CoreEngine:
+    def init_sequence(self) -> T:
         """Initializes the engine that is to be tested.
 
         Its intention is to create and configure an instance of the Engine that will be tested.
@@ -39,51 +39,54 @@ class NoRTLTestBase(ABC):
         Example:
         ```python
         class MyTest(NoRTLTestBase):
-            def init_sequence(self) -> CoreEngine:
-                engine = CoreEngine("my_test_engine")
+            def init_sequence(self) -> T:
+                engine = Engine("my_test_engine")
                 output = engine.define_output("result", width=8)
                 return engine
         ```
 
         Returns:
-            CoreEngine: Initialized engine
+            Engine: Initialized engine
         """
         pass
 
-    def verify_final_state(self, engine: CoreEngine) -> None:
+    def verify_final_state(self, engine: T) -> None:
         """Verifies the final state of the engine after simulation.
 
         This state-sequence is called after the dut and testbench threads have ended.
         It can be used to verify the final state of the dut.
 
         Arguments:
-            engine (CoreEngine): The engine instance to verify
+            engine (EngineProto): The engine instance to verify
         """
         pass
 
-    def the_testbench(self, engine: CoreEngine) -> None:
+    def the_testbench(self, engine: T) -> None:
         """The state sequence that is run in parallel to the engine-under-Test.
 
         This may use the self.assert* functions to verify the behavior.
 
         Arguments:
-            engine (CoreEngine): engine instance
+            engine (T): engine instance
         """
         pass
 
     @abstractmethod
-    def dut(self, engine: CoreEngine) -> None:
+    def dut(self, engine: T) -> None:
         """The dut function is the state sequence that is to be tested.
 
         It is executed in parallel to the testbench. A call to self.assert* is not forbidden
         but not advised to create a good separation between dut and test code.
 
         Arguments:
-            engine (CoreEngine): The engine instance
+            engine (T): The engine instance
         """
         pass
 
-    def get_test_engine(self) -> CoreEngine:
+    def callback_before_rendering(self, engine: T) -> T:
+        return engine
+
+    def get_test_engine(self) -> T:
         self.engine = self.init_sequence()
 
         self.finish_flag = self.engine.define_output('finish', 1, 0)
@@ -240,7 +243,7 @@ class NoRTLTestBase(ABC):
         The method raises pytest.fail if the simulation fails.
         """
         # Create engine from derived class
-        self.engine = self.get_test_engine()
+        self.engine = self.callback_before_rendering(self.get_test_engine())
 
         with TemporaryDirectory() as tempdir_str:
             tmp_path = Path(tempdir_str)

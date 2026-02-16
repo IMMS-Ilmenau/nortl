@@ -5,7 +5,7 @@ from nortl.core import CoreEngine
 from nortl.utils.test_wrapper import NoRTLTestBase
 
 
-class TestChannel(NoRTLTestBase):
+class TestChannel(NoRTLTestBase[CoreEngine]):
     def init_sequence(self) -> CoreEngine:
         engine = CoreEngine('my_engine')
         self.channel = Channel(engine, 8, 'testchannel')
@@ -21,7 +21,7 @@ class TestChannel(NoRTLTestBase):
                 self.assertTrue(rec_val == i)
 
 
-class TestChannelBlocksSender(NoRTLTestBase):
+class TestChannelBlocksSender(NoRTLTestBase[CoreEngine]):
     def init_sequence(self) -> CoreEngine:
         self.expect_timeout = 1
         engine = CoreEngine('my_engine')
@@ -38,7 +38,7 @@ class TestChannelBlocksSender(NoRTLTestBase):
         self.finish_simulation()
 
 
-class TestEmptyChannelBlocksReciever(NoRTLTestBase):
+class TestEmptyChannelBlocksReciever(NoRTLTestBase[CoreEngine]):
     def init_sequence(self) -> CoreEngine:
         self.expect_timeout = 1
         engine = CoreEngine('my_engine')
@@ -55,7 +55,7 @@ class TestEmptyChannelBlocksReciever(NoRTLTestBase):
         self.finish_simulation()
 
 
-class TestElasticChannel_Trivial(NoRTLTestBase):
+class TestElasticChannel_Trivial(NoRTLTestBase[CoreEngine]):
     def init_sequence(self) -> CoreEngine:
         engine = CoreEngine('my_engine')
         self.channel = ElasticChannel(engine, 8, 'testchannel', 8)
@@ -71,7 +71,7 @@ class TestElasticChannel_Trivial(NoRTLTestBase):
                 self.assertTrue(rec_val == i)
 
 
-class TestElasticChannel_SendMultiple(NoRTLTestBase):
+class TestElasticChannel_SendMultiple(NoRTLTestBase[CoreEngine]):
     def init_sequence(self) -> CoreEngine:
         engine = CoreEngine('my_engine')
         self.channel = ElasticChannel(engine, 8, 'testchannel', 8)
@@ -88,7 +88,7 @@ class TestElasticChannel_SendMultiple(NoRTLTestBase):
                 self.assertEqual(rec_val, i)
 
 
-class TestElasticChannel_sender_faster_than_rec(NoRTLTestBase):
+class TestElasticChannel_sender_faster_than_rec(NoRTLTestBase[CoreEngine]):
     def init_sequence(self) -> CoreEngine:
         engine = CoreEngine('my_engine')
         self.channel = ElasticChannel(engine, 8, 'testchannel', 8)
@@ -105,7 +105,7 @@ class TestElasticChannel_sender_faster_than_rec(NoRTLTestBase):
                 self.assertTrue(rec_val == i)
 
 
-class TestElasticChannel_delayed_rec(NoRTLTestBase):
+class TestElasticChannel_delayed_rec(NoRTLTestBase[CoreEngine]):
     def init_sequence(self) -> CoreEngine:
         engine = CoreEngine('my_engine')
         self.channel = ElasticChannel(engine, 8, 'testchannel', 8)
@@ -123,7 +123,7 @@ class TestElasticChannel_delayed_rec(NoRTLTestBase):
                 self.assertTrue(rec_val == i)
 
 
-class TestElasticChannel_delayed_send(NoRTLTestBase):
+class TestElasticChannel_delayed_send(NoRTLTestBase[CoreEngine]):
     def init_sequence(self) -> CoreEngine:
         engine = CoreEngine('my_engine')
         self.channel = ElasticChannel(engine, 8, 'testchannel', 8)
@@ -141,7 +141,7 @@ class TestElasticChannel_delayed_send(NoRTLTestBase):
                 self.assertTrue(rec_val == i)
 
 
-class TestElasticChannel_rec_faster_than_sender(NoRTLTestBase):
+class TestElasticChannel_rec_faster_than_sender(NoRTLTestBase[CoreEngine]):
     def init_sequence(self) -> CoreEngine:
         engine = CoreEngine('my_engine')
         self.channel = ElasticChannel(engine, 8, 'testchannel', 8)
@@ -159,7 +159,7 @@ class TestElasticChannel_rec_faster_than_sender(NoRTLTestBase):
                 self.assertTrue(rec_val == i)
 
 
-class TestElasticChannelBlocksSender(NoRTLTestBase):
+class TestElasticChannelBlocksSender(NoRTLTestBase[CoreEngine]):
     def init_sequence(self) -> CoreEngine:
         self.expect_timeout = 1
         engine = CoreEngine('my_engine')
@@ -176,7 +176,7 @@ class TestElasticChannelBlocksSender(NoRTLTestBase):
         self.finish_simulation()
 
 
-class TestEmptyElasticChannelBlocksReciever(NoRTLTestBase):
+class TestEmptyElasticChannelBlocksReciever(NoRTLTestBase[CoreEngine]):
     def init_sequence(self) -> CoreEngine:
         self.expect_timeout = 1
 
