@@ -1,7 +1,11 @@
 from pathlib import Path
+from typing import List
 
 from nortl import Engine
+from nortl.algorithms.scratch_reordering import index_overlap
+from nortl.core.protocols import ScratchSignalProto
 from nortl.renderer import ScratchpadVisualizationRenderer
+from nortl.utils.test_wrapper import NoRTLTestBase
 
 
 def verify_nonegative_indices(engine: Engine) -> None:
@@ -124,3 +128,51 @@ def test_simple_reordering_2() -> None:
 
     verify_nonegative_indices(engine)
     verify_scratch_pad_width(engine)
+
+
+def test_for_overlap() -> None:
+    engine = Engine('my_engine')
+
+    engine.sync()
+    s1 = engine.define_scratch(4)
+    engine.sync()
+
+    s2 = engine.define_scratch(8)
+    engine.sync()
+
+    engine.scratch_reordering()
+
+    assert not index_overlap(s1, s2)
+
+
+class TestScratchReoderingWithVerilog(NoRTLTestBase[Engine]):
+    def init_sequence(self) -> Engine:
+        e = Engine('my_engine')
+        e.sync()
+        self.scratch_lst: List[ScratchSignalProto] = []
+
+        return e
+
+    def dut(self, engine: Engine) -> None:
+        s1 = engine.define_scratch(4)
+        engine.set(s1, 1)
+        self.scratch_lst.append(s1)
+        engine.sync()
+
+        s2 = engine.define_scratch(8)
+        engine.set(s2, 2)
+        self.scratch_lst.append(s2)
+
+        print(s2.render())
+        engine.sync()
+
+    def callback_before_rendering(self, engine: Engine) -> Engine:
+        engine.scratch_reordering()
+        return engine
+
+    def verify_final_state(self, engine: Engine) -> None:
+        for i, scratch in enumerate(self.scratch_lst):
+            engine.print(f'scratch_lst[{i}]=%d', scratch)
+            self.assertEqual(scratch, i + 1)
+
+        self.finish_simulation()

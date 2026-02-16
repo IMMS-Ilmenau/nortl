@@ -9,6 +9,7 @@ from math import ceil, log2
 from types import GeneratorType
 from typing import (
     Callable,
+    ClassVar,
     Dict,
     Final,
     Generator,
@@ -431,6 +432,8 @@ class BaseOperation(OperationTrait):
 
     _renderer: RendererProto
 
+    cache_enabled: ClassVar = True
+
     def __init__(self) -> None:
         super().__init__()
         self._cache: Dict[Optional[str], str] = {}
@@ -457,8 +460,12 @@ class BaseOperation(OperationTrait):
         Arguments:
             target: Target language.
         """
-        if target not in self._cache:
+        if self.cache_enabled and target not in self._cache:
             self._cache[target] = self._renderer(target)
+        if not self.cache_enabled:
+            self._cache = {}
+            return self._renderer(target)
+
         return self._cache[target]
 
 

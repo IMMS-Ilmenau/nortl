@@ -2,6 +2,7 @@ import itertools as it
 from typing import List, Set, Tuple
 
 from nortl.core.engine import CoreEngine
+from nortl.core.operations import BaseOperation
 from nortl.core.protocols import ScratchSignalProto
 from nortl.utils.type_aliases import IntSlice
 
@@ -63,12 +64,12 @@ def index_overlap(signal1: ScratchSignalProto, signal2: ScratchSignalProto) -> b
     if isinstance(signal1.index, int) and isinstance(signal2.index, int):
         return signal1.index == signal2.index
     elif isinstance(signal1.index, int) and not isinstance(signal2.index, int):
-        return signal1.index >= signal2.index.start and signal1.index <= signal2.index.stop  # type:ignore
+        return signal1.index <= signal2.index.start and signal1.index >= signal2.index.stop  # type:ignore
     elif isinstance(signal2.index, int) and not isinstance(signal1.index, int):
-        return signal2.index >= signal1.index.start and signal2.index <= signal1.index.stop  # type:ignore
+        return signal2.index <= signal1.index.start and signal2.index >= signal1.index.stop  # type:ignore
     else:
-        ret = signal1.index.start >= signal2.index.start and signal1.index.start <= signal2.index.stop  # type:ignore
-        ret = ret or (signal1.index.stop >= signal2.index.start and signal1.index.stop <= signal2.index.stop)  # type:ignore
+        ret = signal1.index.start <= signal2.index.start and signal1.index.start >= signal2.index.stop  # type:ignore
+        ret = ret or (signal1.index.stop <= signal2.index.start and signal1.index.stop >= signal2.index.stop)  # type:ignore
         return ret
 
 
@@ -160,7 +161,7 @@ class ScratchReorderingMixin(CoreEngine):
             raise RuntimeError('Scratch signal width must always be integer and cannot be a Renderable!')
 
         if scratch_signal.width > 1:
-            new_pos: IntSlice | int = slice(new_start + scratch_signal.width, new_start)
+            new_pos: IntSlice | int = slice(new_start + scratch_signal.width - 1, new_start)
         else:
             new_pos = new_start
 
@@ -275,8 +276,6 @@ class ScratchReorderingMixin(CoreEngine):
 
             universe = new_universe
 
-            print(f'universe size {len(universe)}, current width = {max(scratch_widths)}')
-
         # Now shift all signals to the beginning of the scratch pad
         new_scratchpad_width = 0
 
@@ -291,3 +290,6 @@ class ScratchReorderingMixin(CoreEngine):
             self._relocate_scratch_signal(s, pos - start_offset)
 
         self.scratch_manager._scratchpad_width.update(new_scratchpad_width)  # type:ignore
+
+        # Disable render cache since it may hold invalid values
+        BaseOperation.cache_enabled = False
