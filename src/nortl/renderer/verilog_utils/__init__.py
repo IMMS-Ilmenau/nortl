@@ -27,17 +27,18 @@ from typing import Literal
 
 from nortl.core.protocols import WorkerProto
 
-from .abstractions import OneHotEncodedStateRegister, StateRegister, StateRegisterBase
+from .abstractions import MultiHotEncodedStateRegister, OneHotEncodedStateRegister, StateRegister, StateRegisterBase
 from .structural import VerilogDeclaration, VerilogModule
 
 __all__ = [
+    'MultiHotEncodedStateRegister',
     'OneHotEncodedStateRegister',
     'StateRegister',
     'VerilogDeclaration',
     'VerilogModule',
 ]
 
-ENCODINGS = Literal['binary', 'one-hot']
+ENCODINGS = Literal['binary', 'one-hot', 'multi-hot']
 
 
 def create_state_var(worker: WorkerProto, encoding: ENCODINGS = 'binary') -> StateRegisterBase:
@@ -45,3 +46,6 @@ def create_state_var(worker: WorkerProto, encoding: ENCODINGS = 'binary') -> Sta
         return StateRegister(worker)
     if encoding == 'one-hot':
         return OneHotEncodedStateRegister(worker)
+    if encoding == 'multi-hot':
+        return MultiHotEncodedStateRegister(worker)
+    raise ValueError(f'Unknown encoding: {encoding}')

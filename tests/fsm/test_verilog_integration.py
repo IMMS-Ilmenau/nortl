@@ -26,7 +26,7 @@ class SimulatorError(Exception):
     pass
 
 
-STATE_ENCODINGS = ['binary', 'one-hot']
+STATE_ENCODINGS = ['binary', 'one-hot', 'multi-hot']
 
 
 def execute_test(engine: Engine, clock_gating: bool = False, encoding: ENCODINGS = 'binary') -> str:
