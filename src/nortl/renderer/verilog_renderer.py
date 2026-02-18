@@ -1,8 +1,9 @@
-from typing import List
+from typing import Dict, List
 
 from nortl.core.protocols import EngineProto
 
-from .verilog_utils.process import AlwaysComb, AlwaysFF, VerilogAssignment, VerilogCase, VerilogIf, VerilogPrint, VerilogPrintf
+from .verilog_utils.abstractions import StateRegister
+from .verilog_utils.process import AlwaysComb, AlwaysFF, VerilogAssignment, VerilogIf, VerilogPrint, VerilogPrintf
 from .verilog_utils.structural import VerilogDeclaration, VerilogModule, VerilogPortDeclaration
 
 # FIXME: Make empty blocks being not rendered at all.
@@ -32,10 +33,13 @@ class VerilogRenderer:
 
         self.clk_request_signals: List[str] = []
 
+        self.state_regs: Dict[str, StateRegister] = {}
+
     def clear(self) -> None:
         """Clears the internal code list and resets the Verilog module for a new rendering cycle."""
         self.codelst = []
         self.verilog_module = VerilogModule(self.engine.module_name)
+        self.state_regs = {}
 
     def render(self) -> str:
         """Renders the engine into Verilog code.
@@ -48,7 +52,7 @@ class VerilogRenderer:
         self.clear()
 
         self.create_interface()
-        self.create_state_enum()
+        self.create_state_regs()
         self.create_instances()
         self.create_next_state_logic()
         self.create_output_function()
@@ -116,25 +120,23 @@ class VerilogRenderer:
         clk_en_proc.add(VerilogAssignment('GCLK_enable', "1'b1"))
 
         for worker in self.engine.workers.values():
-            state_variable = worker.create_scoped_name('state_nxt')
-            cases = VerilogCase(state_variable)
+            self.state_regs[worker.name].new_case('next state')
 
             for state in worker.states:
                 if state.has_metadata('Clock_gating'):  # FIXME: Add Metadata to docs
-                    cases.add_case(state.name)
-                    cases.add_item(state.name, VerilogAssignment('GCLK_enable', "1'b0"))
+                    self.state_regs[worker.name].add_case(state.name, VerilogAssignment('GCLK_enable', "1'b0"))
 
                     for condition, _ in state.transitions:
                         block = VerilogIf(condition)
                         block.true_branch.add(VerilogAssignment('GCLK_enable', "1'b1"))
-                        cases.add_item(state.name, block)
+                        self.state_regs[worker.name].add_case(state.name, block)
 
                     for signal, val, condition in state.assignments:
                         block = VerilogIf((signal != val) & (condition))
                         block.true_branch.add(VerilogAssignment('GCLK_enable', "1'b1"))
-                        cases.add_item(state.name, block)
+                        self.state_regs[worker.name].add_case(state.name, block)
 
-            clk_en_proc.add(cases)
+            clk_en_proc.add(self.state_regs[worker.name].build_case())
 
         for req in clk_requests:
             block = VerilogIf(req)
@@ -171,19 +173,20 @@ class VerilogRenderer:
                     port_declaration = VerilogPortDeclaration(signal.data_type, name, width=signal.width)
                 self.verilog_module.ports.append(port_declaration)
 
-    def create_state_enum(self) -> None:
+    def create_state_regs(self) -> None:
         """Creates the Verilog state enumeration.
 
         This method defines the enumeration type for the engine states, which is used to represent
         the current state of the engine in the Verilog code.
         """
-        for worker in self.engine.workers.values():
-            state_variable = worker.create_scoped_name('state')
-            state_nxt_variable = worker.create_scoped_name('state_nxt')
-            state_var = VerilogDeclaration('enum', [state_variable, state_nxt_variable])
+
+        for name, worker in self.engine.workers.items():
+            self.state_regs[name] = StateRegister(worker)
             for state in worker.states:
-                state_var.add_member(state.name)
-            self.verilog_module.signals.append(state_var)
+                self.state_regs[name].add_state(state.name)
+
+        for state_reg in self.state_regs.values():
+            self.verilog_module.signals.append(state_reg.declare())
 
     def create_instances(self) -> None:
         """Creates the Verilog module instances.
@@ -220,27 +223,24 @@ class VerilogRenderer:
         next_state_func = AlwaysComb()
 
         for worker in self.engine.workers.values():
-            state_variable = worker.create_scoped_name('state')
-            state_nxt_variable = worker.create_scoped_name('state_nxt')
+            self.state_regs[worker.name].new_case('current state')
 
-            next_state_func.add(VerilogAssignment(state_nxt_variable, state_variable))
+            state_nxt_variable = self.state_regs[worker.name].next_state_var
 
-            cases = VerilogCase(state_variable)
+            next_state_func.add(VerilogAssignment(state_nxt_variable, self.state_regs[worker.name].state_var))
 
             for state in worker.states:
-                cases.add_case(state.name)
-
                 for condition, next_state in state.transitions:
                     if condition.render() == "1'h1":
-                        cases.add_item(state.name, VerilogAssignment(state_nxt_variable, next_state))
+                        self.state_regs[worker.name].add_case(state.name, VerilogAssignment(state_nxt_variable, next_state))
                     elif condition.render() == "1'h0":
                         pass
                     else:
                         item = VerilogIf(condition)
                         item.true_branch.add(VerilogAssignment(state_nxt_variable, next_state))
-                        cases.add_item(state.name, item)
+                        self.state_regs[worker.name].add_case(state.name, item)
 
-            next_state_func.add(cases)
+            next_state_func.add(self.state_regs[worker.name].build_case())
 
         self.verilog_module.functionals.append(next_state_func)
 
@@ -260,22 +260,19 @@ class VerilogRenderer:
                 output_func.add(VerilogAssignment(signal, '0'))
 
         for worker in self.engine.workers.values():
-            state_nxt_variable = worker.create_scoped_name('state_nxt')
-            cases = VerilogCase(state_nxt_variable)
+            self.state_regs[worker.name].new_case('next state')
 
             for state in worker.states:
                 if len(state.assignments) > 0:
-                    cases.add_case(state.name)
-
                     for signal, val, condition in state.assignments:
                         if condition.render() == "1'h1":
-                            cases.add_item(state.name, VerilogAssignment(signal, val))
+                            self.state_regs[worker.name].add_case(state.name, VerilogAssignment(signal, val))
                         else:
                             block = VerilogIf(condition)
                             block.true_branch.add(VerilogAssignment(signal, val))
-                            cases.add_item(state.name, block)
+                            self.state_regs[worker.name].add_case(state.name, block)
 
-            output_func.add(cases)
+            output_func.add(self.state_regs[worker.name].build_case())
 
         self.verilog_module.functionals.append(output_func)
 
@@ -284,20 +281,17 @@ class VerilogRenderer:
         output_func = AlwaysFF('CLK_I', 'RST_ASYNC_I')
 
         for worker in self.engine.workers.values():
-            state_nxt_variable = worker.create_scoped_name('state_nxt')
-            cases = VerilogCase(state_nxt_variable)
+            self.state_regs[worker.name].new_case('next state')
 
             for state in worker.states:
-                cases.add_case(state.name)
-
                 for fname, item in state._printfs.items():
                     for line, val in item:
-                        cases.add_item(state.name, VerilogPrintf(fname, line, *[v.render() for v in val]))
+                        self.state_regs[worker.name].add_case(state.name, VerilogPrintf(fname, line, *[v.render() for v in val]))
 
                 for line, val in state._prints:
-                    cases.add_item(state.name, VerilogPrint(line, *[v.render() for v in val]))
+                    self.state_regs[worker.name].add_case(state.name, VerilogPrint(line, *[v.render() for v in val]))
 
-            output_func.add(cases)
+            output_func.add(self.state_regs[worker.name].build_case())
 
         self.verilog_module.functionals.append(output_func)
 
@@ -318,17 +312,5 @@ class VerilogRenderer:
 
         This method generates the logic for transitioning the engine from one state to another.
         """
-        state_transition = AlwaysFF('CLK_I', 'RST_ASYNC_I')
-        for worker in self.engine.workers.values():
-            state_variable = worker.create_scoped_name('state')
-            state_nxt_variable = worker.create_scoped_name('state_nxt')
-
-            state_transition.add_reset(VerilogAssignment(state_variable, worker.reset_state.name))
-
-            block = VerilogIf(f'{worker.sync_reset}')
-            block.true_branch.add(VerilogAssignment(state_variable, worker.reset_state.name))
-            block.false_branch.add(VerilogAssignment(state_variable, state_nxt_variable))
-
-            state_transition.add(block)
-
-        self.verilog_module.functionals.append(state_transition)
+        for state_reg in self.state_regs.values():
+            self.verilog_module.functionals.append(state_reg.build_state_transition())

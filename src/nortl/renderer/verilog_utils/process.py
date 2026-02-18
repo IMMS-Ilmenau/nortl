@@ -242,9 +242,6 @@ class VerilogCase:
 class VerilogIf:
     """Represents a Verilog if-else statement.
 
-    Args:
-        condition: The condition for the if statement.
-
     Example:
         >>> if_stmt = VerilogIf("reset")
         >>> if_stmt.true_branch.add(VerilogAssignment("state", "IDLE"))
@@ -258,15 +255,27 @@ class VerilogIf:
         end
     """
 
-    def __init__(self, condition: Union[VerilogRenderable, str]) -> None:
+    def __init__(
+        self,
+        condition: Union[VerilogRenderable, str],
+        true_branch: Optional[VerilogRenderable] = None,
+        false_branch: Optional[VerilogRenderable] = None,
+    ) -> None:
         """Initialize the if statement.
 
         Args:
             condition: The condition for the if statement.
+            true_branch: What is to be put in the true branch of the statement
+            false_branch: Similar to true branch -- but for the false branch, obviously
         """
         self.condition: VerilogRenderable = to_verilog_renderable(condition)
         self.true_branch = VerilogBlock()
         self.false_branch = VerilogBlock()
+
+        if true_branch is not None:
+            self.true_branch.add(true_branch)
+        if false_branch is not None:
+            self.false_branch.add(false_branch)
 
     def render(self) -> str:
         """Render the if-else statement.
