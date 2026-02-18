@@ -2,7 +2,8 @@ from typing import Dict, List
 
 from nortl.core.protocols import EngineProto
 
-from .verilog_utils.abstractions import StateRegister
+from .verilog_utils import ENCODINGS, create_state_var
+from .verilog_utils.abstractions import StateRegisterBase
 from .verilog_utils.process import AlwaysComb, AlwaysFF, VerilogAssignment, VerilogIf, VerilogPrint, VerilogPrintf
 from .verilog_utils.structural import VerilogDeclaration, VerilogModule, VerilogPortDeclaration
 
@@ -15,13 +16,14 @@ class VerilogRenderer:
     To simplify matters, the verilog_utils folder contains code for rendering individual blocks.
     """
 
-    def __init__(self, engine: EngineProto, include_modules: bool = True, clock_gating: bool = False):
+    def __init__(self, engine: EngineProto, include_modules: bool = True, clock_gating: bool = False, encoding: ENCODINGS = 'binary'):
         """Initializes the VerilogRenderer with the engine data and rendering options.
 
         Args:
             engine: The CoreEngine object representing the finite state machine.
             include_modules: A boolean indicating whether to include module instantiations in the generated Verilog code. Defaults to True.
             clock_gating: A boolean indicating whether to enable clock gating logic in the generated Verilog code. Defaults to False.
+            encoding: Encoding to use for the state registers
         """
         self.engine = engine
         self.verilog_module = VerilogModule(self.engine.module_name)
@@ -30,10 +32,11 @@ class VerilogRenderer:
 
         self.include_modules = include_modules
         self.clock_gating = clock_gating
+        self.encoding = encoding
 
         self.clk_request_signals: List[str] = []
 
-        self.state_regs: Dict[str, StateRegister] = {}
+        self.state_regs: Dict[str, StateRegisterBase] = {}
 
     def clear(self) -> None:
         """Clears the internal code list and resets the Verilog module for a new rendering cycle."""
@@ -181,7 +184,7 @@ class VerilogRenderer:
         """
 
         for name, worker in self.engine.workers.items():
-            self.state_regs[name] = StateRegister(worker)
+            self.state_regs[name] = create_state_var(worker, self.encoding)
             for state in worker.states:
                 self.state_regs[name].add_state(state.name)
 
@@ -225,19 +228,17 @@ class VerilogRenderer:
         for worker in self.engine.workers.values():
             self.state_regs[worker.name].new_case('current state')
 
-            state_nxt_variable = self.state_regs[worker.name].next_state_var
-
-            next_state_func.add(VerilogAssignment(state_nxt_variable, self.state_regs[worker.name].state_var))
+            next_state_func.add(self.state_regs[worker.name].state_transition(None))
 
             for state in worker.states:
                 for condition, next_state in state.transitions:
                     if condition.render() == "1'h1":
-                        self.state_regs[worker.name].add_case(state.name, VerilogAssignment(state_nxt_variable, next_state))
+                        self.state_regs[worker.name].add_case(state.name, self.state_regs[worker.name].state_transition(next_state.name))
                     elif condition.render() == "1'h0":
                         pass
                     else:
                         item = VerilogIf(condition)
-                        item.true_branch.add(VerilogAssignment(state_nxt_variable, next_state))
+                        item.true_branch.add(self.state_regs[worker.name].state_transition(next_state.name))
                         self.state_regs[worker.name].add_case(state.name, item)
 
             next_state_func.add(self.state_regs[worker.name].build_case())

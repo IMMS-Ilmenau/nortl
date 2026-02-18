@@ -7,12 +7,15 @@ from subprocess import PIPE, run
 from tempfile import TemporaryDirectory
 from typing import Tuple
 
+import pytest
+
 from nortl import Engine
 from nortl.core.constructs import Condition, Fork, ForLoop
 from nortl.core.constructs.loop import WhileLoop
 from nortl.core.operations import Concat, Const
 from nortl.core.protocols import SignalProto
 from nortl.renderer.verilog_renderer import VerilogRenderer
+from nortl.renderer.verilog_utils import ENCODINGS
 
 
 class VerilogError(Exception):
@@ -23,12 +26,16 @@ class SimulatorError(Exception):
     pass
 
 
-def execute_test(engine: Engine, clock_gating: bool = False) -> str:
+STATE_ENCODINGS = ['binary', 'one-hot']
+
+
+def execute_test(engine: Engine, clock_gating: bool = False, encoding: ENCODINGS = 'binary') -> str:
     """Helper function that uses iverilog to simulate the testbench with the engine.
 
     Args:
-        engine (engine): engine to be tested
-        clock_gating (bool): If clock gating should be used in this test
+        engine: engine to be tested
+        clock_gating: If clock gating should be used in this test
+        encoding: state encoding used for the test
     """
 
     verilog_file = Path(__file__).parent / 'verilog' / 'testbench.sv'
@@ -40,7 +47,7 @@ def execute_test(engine: Engine, clock_gating: bool = False) -> str:
         shutil.copy(verilog_file, tempdir)
 
         # Render engine to verilog
-        renderer = VerilogRenderer(engine, clock_gating=clock_gating)
+        renderer = VerilogRenderer(engine, clock_gating=clock_gating, encoding=encoding)
         with open(tempdir / 'dut.sv', 'w') as file:
             file.write(renderer.render())
 
@@ -66,15 +73,17 @@ def execute_test(engine: Engine, clock_gating: bool = False) -> str:
         return result.stdout
 
 
-def test_simulation_setup() -> None:
+@pytest.mark.parametrize('encoding', STATE_ENCODINGS)
+def test_simulation_setup(encoding: ENCODINGS) -> None:
     """Test that the engine can be simulated by using an empty engine."""
     engine = Engine('my_engine')
     _ = engine.define_input('IN')
     _ = engine.define_output('OUT', 8)
-    _ = execute_test(engine)
+    _ = execute_test(engine, encoding=encoding)
 
 
-def test_output_probe() -> None:
+@pytest.mark.parametrize('encoding', STATE_ENCODINGS)
+def test_output_probe(encoding: ENCODINGS) -> None:
     """Tests, if the output values can actually be probed."""
     engine = Engine('my_engine')
     _ = engine.define_input('IN')
@@ -84,14 +93,15 @@ def test_output_probe() -> None:
     engine.set(output, 55)
     engine.wait_for(output == 1)  # Stop execution
 
-    result = execute_test(engine)
+    result = execute_test(engine, encoding=encoding)
 
     print(result)
 
     assert 'OUT= 55' in result
 
 
-def test_output_combinational() -> None:
+@pytest.mark.parametrize('encoding', STATE_ENCODINGS)
+def test_output_combinational(encoding: ENCODINGS) -> None:
     """Tests, if the output values can actually be probed."""
     engine = Engine('my_engine')
     _ = engine.define_input('IN')
@@ -102,14 +112,15 @@ def test_output_combinational() -> None:
     engine.set(output_old, 55)
     engine.wait_for(output_old == 1)  # Stop execution
 
-    result = execute_test(engine)
+    result = execute_test(engine, encoding=encoding)
 
     print(result)
 
     assert 'OUT= 55' in result
 
 
-def test_output_count() -> None:
+@pytest.mark.parametrize('encoding', STATE_ENCODINGS)
+def test_output_count(encoding: ENCODINGS) -> None:
     """Tests, if the output values can actually be probed."""
     engine = Engine('my_engine')
     _ = engine.define_input('IN')
@@ -119,7 +130,7 @@ def test_output_count() -> None:
         engine.sync()
     engine.wait_for(output == 1)  # Stop execution
 
-    result = execute_test(engine)
+    result = execute_test(engine, encoding=encoding)
 
     res = re.findall(r'OUT=\s*\d+', result)
     res = [re.sub(r'\s*', '', r) for r in res]
@@ -129,7 +140,8 @@ def test_output_count() -> None:
     assert res == expected
 
 
-def test_output_count_ForLoop() -> None:
+@pytest.mark.parametrize('encoding', STATE_ENCODINGS)
+def test_output_count_ForLoop(encoding: ENCODINGS) -> None:
     """Tests, if the output values can actually be probed."""
     engine = Engine('my_engine')
     _ = engine.define_input('IN')
@@ -142,7 +154,7 @@ def test_output_count_ForLoop() -> None:
 
     engine.wait_for(output == 1)  # Stop execution
 
-    result = execute_test(engine)
+    result = execute_test(engine, encoding=encoding)
 
     res = re.findall(r'OUT=\s*\d+', result)
     res = [re.sub(r'\s*', '', r) for r in res]
@@ -152,7 +164,8 @@ def test_output_count_ForLoop() -> None:
     assert res == expected
 
 
-def test_WhileLoop() -> None:
+@pytest.mark.parametrize('encoding', STATE_ENCODINGS)
+def test_WhileLoop(encoding: ENCODINGS) -> None:
     engine = Engine('my_engine')
     IN = engine.define_input('IN')  # noqa: N806
     OUT = engine.define_output('OUT', 8)  # noqa: N806
@@ -165,7 +178,7 @@ def test_WhileLoop() -> None:
         engine.sync()
         engine.wait_for(IN == 0)
 
-    result = execute_test(engine)
+    result = execute_test(engine, encoding=encoding)
 
     res = re.findall(r'OUT=\s*\d+', result)
     res = [re.sub(r'\s*', '', r) for r in res]
@@ -175,7 +188,8 @@ def test_WhileLoop() -> None:
     assert res == expected
 
 
-def test_slicing() -> None:
+@pytest.mark.parametrize('encoding', STATE_ENCODINGS)
+def test_slicing(encoding: ENCODINGS) -> None:
     """Tests, if renderables are sliced correctly."""
     engine = Engine('my_engine')
     _ = engine.define_input('IN')
@@ -192,7 +206,7 @@ def test_slicing() -> None:
 
     engine.wait_for(output == 11)  # Stop execution
 
-    result = execute_test(engine)
+    result = execute_test(engine, encoding=encoding)
 
     res = re.findall(r'OUT=\s*\d+', result)
     res = [re.sub(r'\s*', '', r) for r in res]
@@ -203,7 +217,8 @@ def test_slicing() -> None:
     assert res == expected
 
 
-def test_slicing_of_concat() -> None:
+@pytest.mark.parametrize('encoding', STATE_ENCODINGS)
+def test_slicing_of_concat(encoding: ENCODINGS) -> None:
     """Tests, if a Concat is sliced correctly."""
     engine = Engine('my_engine')
     _ = engine.define_input('IN')
@@ -220,7 +235,7 @@ def test_slicing_of_concat() -> None:
 
     engine.wait_for(output == 11)  # Stop execution
 
-    result = execute_test(engine)
+    result = execute_test(engine, encoding=encoding)
 
     res = re.findall(r'OUT=\s*\d+', result)
     res = [re.sub(r'\s*', '', r) for r in res]
@@ -231,7 +246,8 @@ def test_slicing_of_concat() -> None:
     assert res == expected
 
 
-def test_output_count_CG() -> None:
+@pytest.mark.parametrize('encoding', STATE_ENCODINGS)
+def test_output_count_CG(encoding: ENCODINGS) -> None:
     """Tests, if the output values can actually be probed -- with enabled clock gating."""
     engine = Engine('my_engine')
     _ = engine.define_input('IN')
@@ -244,7 +260,7 @@ def test_output_count_CG() -> None:
         engine.sync()
     engine.wait_for(output == 1)  # Stop execution
 
-    result = execute_test(engine, clock_gating=True)
+    result = execute_test(engine, clock_gating=True, encoding=encoding)
 
     res = re.findall(r'OUT=\s*\d+', result)
     res = [re.sub(r'\s*', '', r) for r in res]
@@ -254,7 +270,8 @@ def test_output_count_CG() -> None:
     assert res == expected
 
 
-def test_rising_edge() -> None:
+@pytest.mark.parametrize('encoding', STATE_ENCODINGS)
+def test_rising_edge(encoding: ENCODINGS) -> None:
     """Tests, if the rising-edge detection works."""
     engine = Engine('my_engine')
     input = engine.define_input('IN')
@@ -265,7 +282,7 @@ def test_rising_edge() -> None:
         engine.set(output, i)
     engine.wait_for(output == 1)  # Stop execution
 
-    result = execute_test(engine)
+    result = execute_test(engine, encoding=encoding)
 
     res = re.findall(r'OUT=\s*\d+', result)
     res = [re.sub(r'\s*', '', r) for r in res]
@@ -276,7 +293,8 @@ def test_rising_edge() -> None:
     assert res == expected
 
 
-def test_falling_edge() -> None:
+@pytest.mark.parametrize('encoding', STATE_ENCODINGS)
+def test_falling_edge(encoding: ENCODINGS) -> None:
     """Tests, if the falling-edge detection works."""
     engine = Engine('my_engine')
     input = engine.define_input('IN')
@@ -287,7 +305,7 @@ def test_falling_edge() -> None:
         engine.set(output, i)
     engine.wait_for(output == 1)  # Stop execution
 
-    result = execute_test(engine)
+    result = execute_test(engine, encoding=encoding)
 
     res = re.findall(r'OUT=\s*\d+', result)
     res = [re.sub(r'\s*', '', r) for r in res]
@@ -298,7 +316,8 @@ def test_falling_edge() -> None:
     assert res == expected
 
 
-def test_delay_1() -> None:
+@pytest.mark.parametrize('encoding', STATE_ENCODINGS)
+def test_delay_1(encoding: ENCODINGS) -> None:
     """Tests, if the falling-edge detection concetenated with a delay works."""
     engine = Engine('my_engine')
     input = engine.define_input('IN')
@@ -311,7 +330,7 @@ def test_delay_1() -> None:
         engine.set(output, i)
     engine.wait_for(output == 1)  # Stop execution
 
-    result = execute_test(engine)
+    result = execute_test(engine, encoding=encoding)
     print(result)
 
     res = re.findall(r'OUT=\s*\d+', result)
@@ -323,7 +342,8 @@ def test_delay_1() -> None:
     assert res == expected
 
 
-def test_delay_2() -> None:
+@pytest.mark.parametrize('encoding', STATE_ENCODINGS)
+def test_delay_2(encoding: ENCODINGS) -> None:
     """Tests, if the falling-edge detection concetenated with a delay works."""
     engine = Engine('my_engine')
     input = engine.define_input('IN')
@@ -334,7 +354,7 @@ def test_delay_2() -> None:
         engine.set(output, i)
     engine.wait_for(output == 1)  # Stop execution
 
-    result = execute_test(engine)
+    result = execute_test(engine, encoding=encoding)
 
     res = re.findall(r'OUT=\s*\d+', result)
     res = [re.sub(r'\s*', '', r) for r in res]
@@ -345,7 +365,8 @@ def test_delay_2() -> None:
     assert res == expected
 
 
-def test_synchronized() -> None:
+@pytest.mark.parametrize('encoding', STATE_ENCODINGS)
+def test_synchronized(encoding: ENCODINGS) -> None:
     """Tests, if the falling-edge detection concetenated with a delay works."""
     engine = Engine('my_engine')
     input = engine.define_input('IN')
@@ -358,7 +379,7 @@ def test_synchronized() -> None:
         engine.set(output, i)
     engine.wait_for(output == 1)  # Stop execution
 
-    result = execute_test(engine)
+    result = execute_test(engine, encoding=encoding)
     print(result)
 
     res = re.findall(r'OUT=\s*\d+', result)
@@ -370,7 +391,8 @@ def test_synchronized() -> None:
     assert res == expected
 
 
-def test_scratch_pad() -> None:
+@pytest.mark.parametrize('encoding', STATE_ENCODINGS)
+def test_scratch_pad(encoding: ENCODINGS) -> None:
     """Tests, if the output values can actually be probed."""
     engine = Engine('my_engine')
     _ = engine.define_input('IN')
@@ -392,7 +414,7 @@ def test_scratch_pad() -> None:
     with Condition(engine, output == 9):
         proc.cancel()
 
-    result = execute_test(engine)
+    result = execute_test(engine, encoding=encoding)
 
     print(result)
 
@@ -404,7 +426,8 @@ def test_scratch_pad() -> None:
     assert res == expected
 
 
-def test_multiple_workers() -> None:
+@pytest.mark.parametrize('encoding', STATE_ENCODINGS)
+def test_multiple_workers(encoding: ENCODINGS) -> None:
     """Tests manually instantiating multiple workers.
 
     This is normally not recommended, users should use a Fork instead.
@@ -471,7 +494,7 @@ def test_multiple_workers() -> None:
     _ = engine.define_output('OUT', 8, value=address_counter)
 
     # Execute the test
-    result = execute_test(engine)
+    result = execute_test(engine, encoding=encoding)
 
     print(result)
 

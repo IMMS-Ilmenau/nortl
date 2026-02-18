@@ -23,9 +23,25 @@ Example:
     endmodule
 """
 
+from typing import Literal
+
+from nortl.core.protocols import WorkerProto
+
+from .abstractions import OneHotEncodedStateRegister, StateRegister, StateRegisterBase
 from .structural import VerilogDeclaration, VerilogModule
 
 __all__ = [
+    'OneHotEncodedStateRegister',
+    'StateRegister',
     'VerilogDeclaration',
     'VerilogModule',
 ]
+
+ENCODINGS = Literal['binary', 'one-hot']
+
+
+def create_state_var(worker: WorkerProto, encoding: ENCODINGS = 'binary') -> StateRegisterBase:
+    if encoding == 'binary':
+        return StateRegister(worker)
+    if encoding == 'one-hot':
+        return OneHotEncodedStateRegister(worker)
