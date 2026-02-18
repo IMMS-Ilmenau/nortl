@@ -176,3 +176,84 @@ class TestScratchReoderingWithVerilog(NoRTLTestBase[Engine]):
             self.assertEqual(scratch, i + 1)
 
         self.finish_simulation()
+
+
+class TestScratchReoderingWithVerilogAndConditions(NoRTLTestBase[Engine]):
+    def init_sequence(self) -> Engine:
+        e = Engine('my_engine')
+        e.sync()
+        self.scratch_lst: List[ScratchSignalProto] = []
+
+        return e
+
+    def dut(self, engine: Engine) -> None:
+        s1 = engine.define_scratch(4)
+        engine.set(s1, 1)
+        self.scratch_lst.append(s1)
+        engine.sync()
+
+        s2 = engine.define_scratch(8)
+        engine.set(s2, 2)
+        self.scratch_lst.append(s2)
+        engine.sync()
+
+        with engine.condition(s1 == 1):
+            s3 = engine.define_scratch(5)
+            engine.set(s3, 3)
+            self.scratch_lst.append(s3)
+            engine.sync()
+
+            print(s3.render())
+
+        assert not s2.states_disjoint(s3)
+
+        engine.sync()
+
+    def callback_before_rendering(self, engine: Engine) -> Engine:
+        engine.scratch_reordering()
+        return engine
+
+    def verify_final_state(self, engine: Engine) -> None:
+        for i, scratch in enumerate(self.scratch_lst):
+            self.assertEqual(scratch, i + 1)
+
+        self.finish_simulation()
+
+
+class TestScratchReoderingWithVerilogAndForks(NoRTLTestBase[Engine]):
+    def init_sequence(self) -> Engine:
+        e = Engine('my_engine')
+        e.sync()
+        self.scratch_lst: List[ScratchSignalProto] = []
+
+        return e
+
+    def dut(self, engine: Engine) -> None:
+        s1 = engine.define_scratch(4)
+        engine.set(s1, 1)
+        self.scratch_lst.append(s1)
+        engine.sync()
+
+        s2 = engine.define_scratch(8)
+        engine.set(s2, 2)
+        self.scratch_lst.append(s2)
+        engine.sync()
+
+        with engine.fork('proc1') as proc1:
+            s3 = engine.define_scratch(5)
+            engine.set(s3, 3)
+            self.scratch_lst.append(s3)
+            engine.sync()
+
+        proc1.join()
+        engine.sync()
+
+    def callback_before_rendering(self, engine: Engine) -> Engine:
+        engine.scratch_reordering()
+        return engine
+
+    def verify_final_state(self, engine: Engine) -> None:
+        for i, scratch in enumerate(self.scratch_lst):
+            self.assertEqual(scratch, i + 1)
+
+        self.finish_simulation()

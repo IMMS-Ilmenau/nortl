@@ -234,7 +234,7 @@ class ScratchReorderingMixin(CoreEngine):
             self._relocate_group(group, start_offset + k, dry_run=False)
 
     def scratch_reordering(self) -> None:
-        """Execute the scratch register reordering optimization.
+        """Experimental: Execute the scratch register reordering optimization.
 
         This function performs the complete scratch reordering algorithm:
         1. Enable caching of active state data in scratch signals
@@ -244,7 +244,13 @@ class ScratchReorderingMixin(CoreEngine):
 
         The optimization aims to minimize multiplexer sizes and improve state merging
         by placing similar signals close together in the scratch map.
+
+        !!! note
+            This is an experimental feature that is not fully verified. It may break your code!
         """
+
+        print('Experimental feature: Scratch reordering. This is highly experimental and may lead to side-effects')
+
         universe = [s for s in self.scratch_manager.scratch_signals]
 
         # enable caching of active state data  in the scratch signals
