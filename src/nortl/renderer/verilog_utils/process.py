@@ -197,7 +197,7 @@ class VerilogCase:
         new_cases: Dict[str, str] = {}
 
         for case, block in self.cases.items():
-            if len(block) != 0:
+            if len(block) != 0 or 'unique' in self.case_type:
                 old_case = ''
                 new_block = block.render()
 
@@ -216,6 +216,9 @@ class VerilogCase:
     def render(self) -> str:
         """Render the case statement.
 
+        If the case has case_type unique, empty cases are also rendered to inform the synthesizer which
+        cases actually exist.
+
         Returns:
             The Verilog case statement string.
         """
@@ -231,7 +234,7 @@ class VerilogCase:
                 content.append(f'{case}: {block}')
         else:
             for case, vblock in self.cases.items():
-                if len(vblock) != 0:
+                if len(vblock) != 0 or 'unique' in self.case_type:
                     content.append(f'{case}: {vblock.render()}')
 
         content.append('endcase')

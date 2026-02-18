@@ -246,9 +246,9 @@ class OneHotEncodedStateRegister(StateRegisterBase):
                  the case statement will use.
         """
         if reg == 'next state':
-            self._current_case = VerilogCase(self.next_state_var)
+            self._current_case = VerilogCase(self.next_state_var, 'unique')
         else:
-            self._current_case = VerilogCase(self.state_var)
+            self._current_case = VerilogCase(self.state_var, 'unique')
 
     def add_case(self, case_value: str, item: VerilogRenderable) -> None:
         """Adds an item to the current case.
@@ -293,6 +293,11 @@ class OneHotEncodedStateRegister(StateRegisterBase):
         """
         if self._current_case is None:
             raise ValueError('No active case. Call new_case() first.')
+
+        # Add missing keys to case object
+        for statename in self.states:
+            if self.encode(statename) not in self._current_case.cases.keys():
+                self._current_case.add_case(self.encode(statename))
 
         return self._current_case
 
@@ -399,9 +404,9 @@ class MultiHotEncodedStateRegister(StateRegisterBase):
                  the case statement will use.
         """
         if reg == 'next state':
-            self._current_case = VerilogCase(self.next_state_var)
+            self._current_case = VerilogCase(self.next_state_var, 'unique')
         else:
-            self._current_case = VerilogCase(self.state_var)
+            self._current_case = VerilogCase(self.state_var, 'unique')
 
     def add_case(self, case_value: str, item: VerilogRenderable) -> None:
         """Adds an item to the current case.
@@ -443,6 +448,11 @@ class MultiHotEncodedStateRegister(StateRegisterBase):
         """
         if self._current_case is None:
             raise ValueError('No active case. Call new_case() first.')
+
+        # Add missing keys to case object
+        for statename in self.states:
+            if self.encode(statename) not in self._current_case.cases.keys():
+                self._current_case.add_case(self.encode(statename))
 
         return self._current_case
 
