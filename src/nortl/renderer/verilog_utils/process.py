@@ -266,6 +266,7 @@ class VerilogIf:
         condition: Union[VerilogRenderable, str],
         true_branch: Optional[VerilogRenderable] = None,
         false_branch: Optional[VerilogRenderable] = None,
+        keyword: Literal['if', 'priority if', 'unique if', 'else if'] = 'if',
     ) -> None:
         """Initialize the if statement.
 
@@ -273,8 +274,13 @@ class VerilogIf:
             condition: The condition for the if statement.
             true_branch: What is to be put in the true branch of the statement
             false_branch: Similar to true branch -- but for the false branch, obviously
+            keyword: Opening keyword for the if statement.
+
+        Warning:
+            `'priority if'` and `'Unique if'` are currently not supported by Icarus Verilog.
         """
         self.condition: VerilogRenderable = to_verilog_renderable(condition)
+        self.keyword = keyword
         self.true_branch = VerilogBlock()
         self.false_branch = VerilogBlock()
 
@@ -292,7 +298,7 @@ class VerilogIf:
         if self.condition.render() == '1':
             return self.true_branch.render_items()
 
-        content = [f'if ({self.condition})']
+        content = [f'{self.keyword} ({self.condition})']
         content.append(self.true_branch.render())
 
         if len(self.false_branch) > 0:

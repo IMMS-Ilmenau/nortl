@@ -27,11 +27,21 @@ __all__ = [
     'AnySignal',
     'Operand',
     'PermanentSignal',
+    'RenderableSelector',
+    'Selector',
 ]
 
+# Operand types
 Operand = Union['Renderable', int, bool]
+Selector = Mapping[Union['Renderable', Literal['default']], Union[Operand, 'Selector']]
+RenderableSelector = Mapping[Union['Renderable', Literal['default']], Union['Renderable', 'RenderableSelector']]
+
+# Signal types
 PermanentSignal = Union['SignalProto', 'SignalSliceProto']
 AnySignal = Union['SignalProto', 'SignalSliceProto', 'ScratchSignalProto']
+
+# Assignment types
+AnyAssignment = Union['AssignmentProto', 'ConditionalAssignmentProto', 'SelectorAssignmentProto']
 
 SIGNAL_TYPES = Literal['input', 'output', 'interface', 'internal', 'local']
 EVENT_TYPES = Literal['edge', 'delay', 'sync']
@@ -70,6 +80,8 @@ class OperationTraitProto(Protocol):
     def read_access(self, ignore: Set[ACCESS_CHECKS] = ...) -> None: ...
 
     def render(self, target: Optional[str] = None) -> str: ...
+
+    def __hash__(self) -> int: ...
 
     # Arithemtic Operations
     def __add__(self, value: Operand, /) -> 'Renderable': ...
@@ -195,6 +207,54 @@ class ModuleInstanceProto(Protocol):
     def override_parameter(self, name: str, value: Union[int, 'ParameterProto', Renderable]) -> None: ...
 
 
+# Assignments
+class AssignmentProto(Protocol):
+    signal: AssignmentTarget
+    value: Renderable
+
+    @property
+    def unconditional(self) -> Literal[True]: ...
+
+
+class ConditionalAssignmentProto(Protocol):
+    signal: AssignmentTarget
+    value: Renderable
+    condition: Renderable
+
+    @property
+    def priority(self) -> Literal[False]: ...
+
+    @property
+    def unconditional(self) -> Literal[False]: ...
+
+    @property
+    def cases(self) -> Tuple[Tuple[Renderable, Renderable]]: ...
+
+    @property
+    def default(self) -> Optional[Renderable]: ...
+
+    def flatten_cases(self) -> Sequence[Tuple[Renderable, Renderable]]: ...
+
+
+class SelectorAssignmentProto(Protocol):
+    signal: AssignmentTarget
+    selector: RenderableSelector
+
+    @property
+    def priority(self) -> bool: ...
+
+    @property
+    def unconditional(self) -> Literal[False]: ...
+
+    @property
+    def cases(self) -> Sequence[Tuple[Renderable, Union[Renderable, 'SelectorAssignmentProto']]]: ...
+
+    @property
+    def default(self) -> Optional[Union[Renderable, 'SelectorAssignmentProto']]: ...
+
+    def flatten_cases(self) -> Sequence[Tuple[Renderable, Renderable]]: ...
+
+
 class StateProto(NamedEntityProto, Protocol):
     _prints: List[Tuple[str, Tuple[Renderable, ...]]]
     _printfs: Dict[str, List[Tuple[str, Tuple[Renderable, ...]]]]
@@ -212,11 +272,13 @@ class StateProto(NamedEntityProto, Protocol):
     def allow_assignments(self) -> bool: ...
 
     @property
-    def assignments(self) -> Sequence[Tuple[AssignmentTarget, Renderable, Renderable]]: ...
+    def assignments(self) -> Sequence[AnyAssignment]: ...
 
     def add_assignment(self, signal: AssignmentTarget, value: Renderable, condition: Optional[Renderable] = None) -> None: ...
 
-    def get_assignment(self, signal: AssignmentTarget) -> Optional[Tuple[AssignmentTarget, Renderable, Renderable]]: ...
+    def add_selector_assignment(self, signal: AssignmentTarget, selector: RenderableSelector, allow_short_circuit: bool = False) -> None: ...
+
+    def get_assignments(self, signal: AssignmentTarget) -> Iterator[AnyAssignment]: ...
 
     # Transition Management
     @property
@@ -452,6 +514,8 @@ class EngineProto(_StateManager, Protocol):
 
     # Setting outputs
     def set(self, signal: AssignmentTarget, level: Union[Renderable, int, bool]) -> None: ...
+
+    def set_when(self, signal: AssignmentTarget, selector: Selector, allow_short_circuit: bool = False) -> None: ...
 
     def set_once(self, signal: AssignmentTarget, level: Union[Renderable, int, bool], reset_level: Union[Renderable, int, bool] = False) -> None: ...
 

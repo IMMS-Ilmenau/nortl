@@ -8,9 +8,9 @@ from nortl.core.module import Module, ModuleInstance
 from nortl.core.operations import Const, to_renderable
 from nortl.core.parameter import Parameter
 from nortl.core.process import Thread, Worker
-from nortl.core.protocols import AssignmentTarget, ModuleProto, PermanentSignal, Renderable, StateProto, WorkerProto
+from nortl.core.protocols import AssignmentTarget, ModuleProto, PermanentSignal, Renderable, Selector, StateProto, WorkerProto
 from nortl.core.signal import ScratchSignal, Signal, SignalSlice
-from nortl.core.state import State
+from nortl.core.state import State, selector_to_renderable
 from nortl.core.tracing import Tracer
 
 __all__ = [
@@ -367,6 +367,80 @@ class CoreEngine:
             raise OwnershipError(f"Signal '{signal.name}' does not belong to this engine.")
 
         self.current_state.add_assignment(write_access(signal), read_access(to_renderable(level)))
+
+    def set_when(self, signal: AssignmentTarget, selector: Selector, allow_short_circuit: bool = False) -> None:
+        """Set level of an output signal based on a selection of conditions.
+
+        This is non-blocking, you can set multiple signals at the same time.
+        Use sync(), wait_for() or jump_if() to apply all signals and move to the next state.
+
+        Arguments:
+            signal: The signal to be set.
+            selector: Mapping of conditions to levels. When a condition is met, the signal is set to this level.
+                If no condition is met, the signal is not updated. The conditions are processed in order, from top to bottom
+
+                It is possible to define a default/fallback value by providing an entry named `'default'` in the selector.
+                If no condition is met, the signal is set to the default level.
+                Providing a `'default'` will treat the selector cases as being in prioritized order.
+                This renders the expression as a `priority if` statement in Verilog, instead of a regular `if`, if this is enabled in the
+                VerilogRenderer.
+                Otherwise, the expression is treated as `unique if`. This means, that only one case at a time must be valid, but the cases may be
+                treated in unsorted order by the synthesis tools.
+
+                The level can also be a selector on its own (sub-selector), creating a nested nested.
+                Note that the `'default'` value only applies to the selector mapping where it is defined, not to nested sub-selectors.
+            allow_short_circuit: If the selector is not in prioritized order (because no `'default'` is provided), but one condition is found to be
+                always True, the other conditions would be unreachable. This is a violation of the rules of `unique if`.
+                If `allow_short_circuit` is True, noRTL will remove all other conditions, and only keep the always-True condition.
+                If it is False , noRTL will raise an exception to avoid downstream issues in the Verilog code.
+
+        Example:
+            The following example defines a 2x2 Input AND into 2-Input OR gate.
+
+            ```python
+            engine = CoreEngine('my_engine')
+
+            ao22 = engine.define_output('ao22', reset_value=0)
+            a = engine.define_input('a')
+            b = engine.define_input('b')
+            c = engine.define_input('c')
+            d = engine.define_input('d')
+
+            engine.set_when(
+                ao22,
+                {
+                    (a & b): 1,
+                    (c & d): 1,
+                    'default': 0,
+                },
+            )
+            ```
+
+            The example roughly translates to this Verilog code:
+
+            ```verilog
+            priority
+            if ((a & b) == 1)
+                ao22 <= 1;
+            else
+            if ((c & d) == 1)
+                ao22 <= 1;
+            else
+                ao22 <= 0;
+            ```
+
+        Raises:
+            TypeError: If the signal is not a noRTL signal.
+            OwnershipError: If the signal does not belong to this noRTL engine.
+        """
+        if not hasattr(signal, 'write_access'):
+            raise TypeError(f'{signal} is not a valid assignment target.')
+        if signal.name not in self.signals or signal.engine is not self:
+            raise OwnershipError(f"Signal '{signal.name}' does not belong to this engine.")
+
+        self.current_state.add_selector_assignment(
+            write_access(signal), read_access(selector_to_renderable(selector)), allow_short_circuit=allow_short_circuit
+        )
 
     def set_once(self, signal: AssignmentTarget, level: Union[Renderable, int, bool], reset_level: Union[Renderable, int, bool] = False) -> None:
         """Set level of an output signal for current state, reset it in next state.

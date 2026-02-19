@@ -4,9 +4,12 @@ from nortl.core.engine import CoreEngine
 from nortl.core.manager.scratch_manager import ScratchManager
 from nortl.core.manager.signal_manager import SignalManager
 from nortl.core.module import Module, ModuleInstance
+from nortl.core.operations import Const
 from nortl.core.parameter import Parameter
 from nortl.core.process import Thread, Worker
 from nortl.core.protocols import (
+    AssignmentProto,
+    ConditionalAssignmentProto,
     EngineProto,
     ModuleInstanceProto,
     ModuleProto,
@@ -14,6 +17,7 @@ from nortl.core.protocols import (
     ParameterProto,
     ScratchManagerProto,
     ScratchSignalProto,
+    SelectorAssignmentProto,
     SignalManagerProto,
     SignalProto,
     SignalSliceProto,
@@ -24,7 +28,7 @@ from nortl.core.protocols import (
     WorkerProto,
 )
 from nortl.core.signal import ScratchSignal, Signal, SignalSlice
-from nortl.core.state import State
+from nortl.core.state import Assignment, ConditionalAssignment, SelectorAssignment, State
 
 
 def test_protocol_compatibility() -> None:
@@ -44,5 +48,8 @@ def test_protocol_compatibility() -> None:
     t13: StaticAccessCheckerProto = StaticAccessChecker(t6)
     t14: ScratchManagerProto = ScratchManager(t4)
     t15: SignalManagerProto = SignalManager(t4)
+    t16: AssignmentProto = Assignment(t6, Const(1))
+    t17: ConditionalAssignmentProto = ConditionalAssignment(t6, Const(1), Const(1))
+    t18: SelectorAssignmentProto = SelectorAssignment(t6, {t8 == 1: Const(1)})
 
-    del t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15
+    del t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18

@@ -23,11 +23,11 @@ Example:
     endmodule
 """
 
-from typing import Literal
+from typing import Literal, Union, overload
 
 from nortl.core.protocols import WorkerProto
 
-from .abstractions import MultiHotEncodedStateRegister, OneHotEncodedStateRegister, StateRegister, StateRegisterBase
+from .abstractions import MultiHotEncodedStateRegister, OneHotEncodedStateRegister, StateRegister
 from .structural import VerilogDeclaration, VerilogModule
 
 __all__ = [
@@ -41,7 +41,16 @@ __all__ = [
 ENCODINGS = Literal['binary', 'one-hot', 'multi-hot']
 
 
-def create_state_var(worker: WorkerProto, encoding: ENCODINGS = 'binary') -> StateRegisterBase:
+@overload
+def create_state_var(worker: WorkerProto, encoding: Literal['binary'] = 'binary') -> StateRegister: ...
+@overload
+def create_state_var(worker: WorkerProto, encoding: Literal['one-hot'] = 'one-hot') -> OneHotEncodedStateRegister: ...
+@overload
+def create_state_var(worker: WorkerProto, encoding: Literal['multi-hot'] = 'multi-hot') -> MultiHotEncodedStateRegister: ...
+def create_state_var(
+    worker: WorkerProto, encoding: ENCODINGS = 'binary'
+) -> Union[StateRegister, OneHotEncodedStateRegister, MultiHotEncodedStateRegister]:
+    """Create state register."""
     if encoding == 'binary':
         return StateRegister(worker)
     if encoding == 'one-hot':

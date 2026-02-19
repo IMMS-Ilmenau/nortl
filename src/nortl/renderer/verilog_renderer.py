@@ -1,9 +1,10 @@
-from typing import Dict, List
+from typing import Dict, Iterable, List, Union
 
-from nortl.core.protocols import EngineProto
+from nortl.core.protocols import ConditionalAssignmentProto, EngineProto, SelectorAssignmentProto
+from nortl.renderer.verilog_utils.utils import VerilogRenderable
 
 from .verilog_utils import ENCODINGS, create_state_var
-from .verilog_utils.abstractions import StateRegisterBase
+from .verilog_utils.abstractions import MultiHotEncodedStateRegister, OneHotEncodedStateRegister, StateRegister
 from .verilog_utils.process import AlwaysComb, AlwaysFF, VerilogAssignment, VerilogIf, VerilogPrint, VerilogPrintf
 from .verilog_utils.structural import VerilogDeclaration, VerilogModule, VerilogPortDeclaration
 
@@ -16,7 +17,14 @@ class VerilogRenderer:
     To simplify matters, the verilog_utils folder contains code for rendering individual blocks.
     """
 
-    def __init__(self, engine: EngineProto, include_modules: bool = True, clock_gating: bool = False, encoding: ENCODINGS = 'binary'):
+    def __init__(
+        self,
+        engine: EngineProto,
+        include_modules: bool = True,
+        clock_gating: bool = False,
+        encoding: ENCODINGS = 'binary',
+        support_unique_if: bool = False,
+    ):
         """Initializes the VerilogRenderer with the engine data and rendering options.
 
         Args:
@@ -24,6 +32,7 @@ class VerilogRenderer:
             include_modules: A boolean indicating whether to include module instantiations in the generated Verilog code. Defaults to True.
             clock_gating: A boolean indicating whether to enable clock gating logic in the generated Verilog code. Defaults to False.
             encoding: Encoding to use for the state registers
+            support_unique_if: If enabled, will render `unique if` and `priority if` statements. This is not supported by all simulators.
         """
         self.engine = engine
         self.verilog_module = VerilogModule(self.engine.module_name)
@@ -33,10 +42,11 @@ class VerilogRenderer:
         self.include_modules = include_modules
         self.clock_gating = clock_gating
         self.encoding = encoding
+        self.support_unique_if = support_unique_if
 
         self.clk_request_signals: List[str] = []
 
-        self.state_regs: Dict[str, StateRegisterBase] = {}
+        self.state_regs: Dict[str, Union[StateRegister, OneHotEncodedStateRegister, MultiHotEncodedStateRegister]] = {}
 
     def clear(self) -> None:
         """Clears the internal code list and resets the Verilog module for a new rendering cycle."""
@@ -134,10 +144,14 @@ class VerilogRenderer:
                         block.true_branch.add(VerilogAssignment('GCLK_enable', "1'b1"))
                         self.state_regs[worker.name].add_case(state.name, block)
 
-                    for signal, val, condition in state.assignments:
-                        block = VerilogIf((signal != val) & (condition))
-                        block.true_branch.add(VerilogAssignment('GCLK_enable', "1'b1"))
-                        self.state_regs[worker.name].add_case(state.name, block)
+                    for assignment in state.assignments:
+                        if assignment.unconditional:
+                            block = VerilogIf((assignment.signal != assignment.value))
+                            block.true_branch.add(VerilogAssignment('GCLK_enable', "1'b1"))
+                            self.state_regs[worker.name].add_case(state.name, block)
+                        else:
+                            # FIXME Selectively enable clock for conditional assignments
+                            self.state_regs[worker.name].add_case(state.name, VerilogAssignment('GCLK_enable', "1'b1"))
 
             clk_en_proc.add(self.state_regs[worker.name].build_case())
 
@@ -245,7 +259,7 @@ class VerilogRenderer:
 
         self.verilog_module.functionals.append(next_state_func)
 
-    def create_output_function(self) -> None:
+    def create_output_function(self) -> None:  # noqa: C901
         """Creates the Verilog output function.
 
         This method generates the logic for updating the output signals of the engine, based on the
@@ -253,8 +267,10 @@ class VerilogRenderer:
         """
         output_func = AlwaysFF('CLK_I', 'RST_ASYNC_I')
 
-        for signal, reset_val, _ in self.engine.main_worker.reset_state.assignments:
-            output_func.add_reset(VerilogAssignment(signal, reset_val))
+        for assignment in self.engine.main_worker.reset_state.assignments:
+            if not assignment.unconditional:
+                raise RuntimeError('Conditional assignments are not allowed in the reset state.')
+            output_func.add_reset(VerilogAssignment(assignment.signal, assignment.value))
 
         for signal in self.engine.signals.values():
             if signal.pulsing:
@@ -265,17 +281,45 @@ class VerilogRenderer:
 
             for state in worker.states:
                 if len(state.assignments) > 0:
-                    for signal, val, condition in state.assignments:
-                        if condition.render() == "1'h1":
-                            self.state_regs[worker.name].add_case(state.name, VerilogAssignment(signal, val))
+                    for assignment in state.assignments:
+                        if assignment.unconditional:
+                            self.state_regs[worker.name].add_case(state.name, VerilogAssignment(assignment.signal, assignment.value))
                         else:
-                            block = VerilogIf(condition)
-                            block.true_branch.add(VerilogAssignment(signal, val))
-                            self.state_regs[worker.name].add_case(state.name, block)
+                            for block in self._extract_conditional_assignment(assignment, support_unique_if=self.support_unique_if):
+                                self.state_regs[worker.name].add_case(state.name, block)
 
             output_func.add(self.state_regs[worker.name].build_case())
 
         self.verilog_module.functionals.append(output_func)
+
+    @classmethod
+    def _extract_conditional_assignment(
+        cls, assignment: Union[ConditionalAssignmentProto, SelectorAssignmentProto], support_unique_if: bool = False
+    ) -> Iterable[VerilogRenderable]:
+        for i, (condition, value) in enumerate(assignment.cases):
+            if i == 0:
+                if support_unique_if:
+                    block = VerilogIf(condition, keyword='priority if' if assignment.priority else 'unique if')
+                else:
+                    block = VerilogIf(condition, keyword='if')
+            else:
+                block = VerilogIf(condition, keyword='else if')
+
+            if hasattr(value, 'cases'):
+                # Value is an selector assignment itself, turn it into nested If, Else If, etc.
+                for nested_block in cls._extract_conditional_assignment(value, support_unique_if=support_unique_if):  # type: ignore[arg-type]
+                    block.true_branch.add(nested_block)
+            else:
+                block.true_branch.add(VerilogAssignment(assignment.signal, value))
+
+            # Close off the list of cases with a default
+            if i == (len(assignment.cases) - 1) and assignment.default is not None:
+                if hasattr(assignment.default, 'cases'):
+                    for nested_block in cls._extract_conditional_assignment(assignment.default, support_unique_if=support_unique_if):  # type: ignore[arg-type]
+                        block.false_branch.add(nested_block)
+                else:
+                    block.false_branch.add(VerilogAssignment(assignment.signal, assignment.default))
+            yield block
 
     def create_prints(self) -> None:
         """Creates the print statements that have been put into each state."""

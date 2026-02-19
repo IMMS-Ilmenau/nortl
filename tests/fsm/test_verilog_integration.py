@@ -504,3 +504,46 @@ def test_multiple_workers(encoding: ENCODINGS) -> None:
     expected = [f'OUT={i}' for i in range(N_ADDRESSES.default_value)]
 
     assert res == expected
+
+
+@pytest.mark.parametrize('encoding', STATE_ENCODINGS)
+def test_selector_assignment(encoding: ENCODINGS) -> None:
+    """Tests selector assignment."""
+    engine = Engine('my_engine')
+
+    _ = engine.define_input('IN')
+    sig_out = engine.define_output('OUT', 8)
+    sel = engine.define_local('sel', 2, reset_value=0)
+    engine.sync()
+
+    for x in range(4):
+        engine.set(sel, x)
+        engine.sync()
+
+        # Effectively, the output just mirrors X, counting from 0 to 3
+        # The selector uses two styles: one with default
+        engine.set_when(
+            sig_out,
+            {
+                ~sel[1]: {
+                    ~sel[0]: 0,
+                    'default': 1,
+                },
+                sel[1]: {
+                    ~sel[0]: 2,
+                    'default': 3,
+                },
+            },
+        )
+        engine.sync()
+
+    result = execute_test(engine, encoding=encoding)
+
+    print(result)
+
+    res = re.findall(r'OUT=\s*\d+', result)
+    res = [re.sub(r'\s*', '', r) for r in res]
+
+    expected = [f'OUT={i}' for i in range(4)]
+
+    assert res == expected

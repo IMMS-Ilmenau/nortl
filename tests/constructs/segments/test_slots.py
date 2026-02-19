@@ -10,6 +10,8 @@ from nortl.core.protocols import ScratchSignalProto, SignalProto
 
 
 class TestExecutor(Protocol):
+    __test__: bool = False
+
     def __call__(self, engine: Engine, clock_gating: bool = False) -> str: ...
 
 

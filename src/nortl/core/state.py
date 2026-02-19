@@ -1,18 +1,210 @@
 """Describes engine states as Python object."""
 
-from typing import Dict, List, Optional, Sequence, Set, Tuple
+from abc import ABCMeta, abstractmethod
+from typing import Dict, Final, Iterable, Iterator, List, Literal, Mapping, Optional, Sequence, Set, Tuple, Union
 
 from typing_extensions import Self
 
 from nortl.core.exceptions import ConflictingAssignmentError, ForbiddenAssignmentError, TransitionLockError, TransitionRestrictionError
-from nortl.core.operations import Const
+from nortl.core.operations import All, Any, to_renderable
 
 from .common import NamedEntity
-from .protocols import AssignmentTarget, EngineProto, Renderable, StateProto, WorkerProto
+from .protocols import AssignmentTarget, EngineProto, Renderable, RenderableSelector, Selector, StateProto, WorkerProto
 
 __all__ = [
     'State',
 ]
+
+
+class BaseAssignment(metaclass=ABCMeta):
+    """Baseclass for assignments."""
+
+    def __init__(self, signal: AssignmentTarget) -> None:
+        self.signal = signal
+
+
+class Assignment(BaseAssignment):
+    """Regular assignment."""
+
+    unconditional: Final = True
+
+    def __init__(self, signal: AssignmentTarget, value: Renderable) -> None:
+        super().__init__(signal)
+        self.value = value
+
+
+class _ConditionalAssignmentMixin(metaclass=ABCMeta):
+    @property
+    @abstractmethod
+    def cases(self) -> Sequence[Tuple[Renderable, Union[Renderable, 'SelectorAssignment']]]:
+        pass
+
+    def flatten_cases(self) -> Sequence[Tuple[Renderable, Renderable]]:
+        """Flatten cases."""
+        result: List[Tuple[Renderable, Renderable]] = []
+
+        for condition, value in self.cases:
+            if isinstance(value, SelectorAssignment):
+                all_conditions = []
+                for sub_condition, sub_value in value.flatten_cases():
+                    result.append((All(condition, sub_condition), sub_value))
+                    all_conditions.append(sub_condition)
+
+                default_condition = All(condition, ~Any(*all_conditions))
+                if isinstance(value.default, SelectorAssignment):
+                    for sub_condition, sub_value in value.default.flatten_cases():
+                        result.append((All(default_condition, sub_condition), sub_value))
+                elif value.default is not None:
+                    result.append((default_condition, value.default))
+            else:
+                result.append((condition, value))
+        return result
+
+
+class ConditionalAssignment(_ConditionalAssignmentMixin, BaseAssignment):
+    """Assignment creating a conditional assignment."""
+
+    unconditional: Final = False
+    priority: Final = False
+    default: Final = None
+
+    def __init__(self, signal: AssignmentTarget, value: Renderable, condition: Renderable) -> None:
+        super().__init__(signal)
+        self.value = value
+        self.condition = condition
+
+    @property
+    def cases(self) -> Tuple[Tuple[Renderable, Renderable]]:
+        return ((self.condition, self.value),)
+
+
+class SelectorAssignment(_ConditionalAssignmentMixin, BaseAssignment):
+    """Assignment creating a selector expression.
+
+    A selector assignment effectively bundles mulitple conditional assignments. It also supports nested cases.
+    If a signal has a selector assignment, no other assignments are allowed.
+    """
+
+    unconditional: Final = False
+
+    def __init__(self, signal: AssignmentTarget, selector: RenderableSelector, allow_short_circuit: bool = False) -> None:
+        super().__init__(signal)
+        self._selector = selector
+        self._allow_short_circuit = allow_short_circuit
+        self._priority: bool
+        self._cases: Sequence[Tuple[Renderable, Union[Renderable, 'SelectorAssignment']]]
+        self._default: Optional[Union[Renderable, 'SelectorAssignment']]
+        self._update_cases()
+
+    @property
+    def selector(self) -> RenderableSelector:
+        return self._selector
+
+    @selector.setter
+    def selector(self, value: RenderableSelector) -> None:
+        self._selector = value
+        self._update_cases()
+
+    @property
+    def priority(self) -> bool:
+        """Indicates if the cases of the selector assignment are in prioritized order.
+
+        This is detected based on the presence of a 'default' condition.
+        """
+        return self._priority
+
+    @property
+    def cases(self) -> Sequence[Tuple[Renderable, Union[Renderable, 'SelectorAssignment']]]:
+        """Sequence of cases for the selector assignment.
+
+        Each case is represented by a tuple of (condition, value). The value can be a selector assignment of its own.
+        """
+        return self._cases
+
+    @property
+    def default(self) -> Optional[Union[Renderable, 'SelectorAssignment']]:
+        """Default value, if no condition is met."""
+        return self._default
+
+    def _update_cases(self) -> None:  # noqa: C901
+        """Compute cases, default and priority."""
+
+        cases: List[Tuple[Renderable, Union[Renderable, 'SelectorAssignment']]] = []
+        default: Optional[Union[Renderable, 'SelectorAssignment']] = None
+        priority: bool = False
+
+        # Find the default and copy the rest into a new selector
+        selector: Dict['Renderable', Union['Renderable', 'RenderableSelector']] = {}
+        for condition, value in self.selector.items():
+            if isinstance(condition, str) and condition == 'default':
+                # If a default is found, the selector is treated as prioritized
+                priority = True
+                if isinstance(value, Mapping):
+                    default = SelectorAssignment(self.signal, value, allow_short_circuit=self._allow_short_circuit)
+                else:
+                    default = value
+            else:
+                selector[condition] = value
+
+        # Process conditions
+        for condition, value in selector.items():
+            short_circuit = False
+            if condition.is_constant:
+                # Filter unreachable cases and short circuit: If the current case is always True, the remaining cases are unreachable
+                if condition.value == 0:  # type: ignore[attr-defined]
+                    continue
+                elif condition.value == 1:  # type: ignore[attr-defined]
+                    if priority:
+                        # Replace the default and stop processing the rest of the cases
+                        # This is only done, if the selector was found to have a priority before
+                        if isinstance(value, Mapping):
+                            default = SelectorAssignment(self.signal, value, allow_short_circuit=self._allow_short_circuit)
+                        else:
+                            default = value
+                        break
+                    elif not self._allow_short_circuit:
+                        raise RuntimeError(
+                            'Selector assignment contains an case that is constantly True.\n'
+                            'However, the selector cases were neither in prioritized order, nor was it created with `allow_short_circuit=True`.\n'
+                            "Selector assignments are treated as prioritized, if the contain a 'default' case.\n"
+                            'To allow noRTL to remove all other cases and only keep the constantly True one, set `allow_short_circuit=True`.'
+                        )
+                    else:
+                        # Short circuit, remove all other cases
+                        cases = []
+                        short_circuit = True
+
+            if isinstance(value, Mapping):
+                cases.append((condition, SelectorAssignment(self.signal, value, allow_short_circuit=self._allow_short_circuit)))
+            else:
+                cases.append((condition, value))
+            if short_circuit:
+                break
+
+        self._cases = cases
+        self._default = default
+        self._priority = priority
+
+
+def selector_to_renderable(selector: Selector) -> RenderableSelector:
+    """Convert conditions and levels of selector to renderables."""
+    new_selector: Dict[Union[Renderable, Literal['default']], Union[Renderable, RenderableSelector]] = {}
+    for condition, value in selector.items():
+        if isinstance(condition, str) and condition == 'default':
+            pass
+        else:
+            condition = to_renderable(condition)
+
+        if isinstance(value, Mapping):
+            value = selector_to_renderable(value)
+        else:
+            value = to_renderable(value)
+        new_selector[condition] = value
+
+    return new_selector
+
+
+AnyAssignment = Union[Assignment, ConditionalAssignment, SelectorAssignment]
 
 
 class State(NamedEntity):
@@ -40,7 +232,7 @@ class State(NamedEntity):
 
         self._allow_assignments = allow_assignments
 
-        self._assignments: List[Tuple[AssignmentTarget, Renderable, Renderable]] = []
+        self._assignments: List[AnyAssignment] = []
         self._assigned_signal_names: Set[str] = set()
 
         # Transition <Condition>, <next value of state variable>
@@ -112,7 +304,7 @@ class State(NamedEntity):
         return self._allow_assignments
 
     @property
-    def assignments(self) -> Sequence[Tuple[AssignmentTarget, Renderable, Renderable]]:
+    def assignments(self) -> Sequence[AnyAssignment]:
         """Sequence of assignments for this state."""
         return self._assignments
 
@@ -121,51 +313,79 @@ class State(NamedEntity):
         if not self.allow_assignments:
             raise ForbiddenAssignmentError(f'State {self.name} does not allow assignments.')
 
-        if condition is None:
-            condition = Const(1, 1)
+        # Check if signal is already assigned
+        for assignment in self.get_assignments(signal):
+            # Ignore conditional assignments
+            # FIXME Danger: Conditional assignments fully bypass the multi-assignment check!
+            if isinstance(assignment, ConditionalAssignment) and (assignment.condition == 1).render() != "1'h1":
+                continue
 
-        # Check if signal is already assigned for unconditional assigns
-        if (old_assignment := self.get_assignment(signal)) is not None and (condition == 1).render() == "1'h1":
-            other_signal, old_value, _ = old_assignment
-
-            overlap = signal.overlaps_with(other_signal)
+            # Regular assignment, test overlap
+            overlap = signal.overlaps_with(assignment.signal)
 
             if overlap == 'partial':
                 raise ConflictingAssignmentError(
                     f'State {self.name} already has an assignment to signal {signal.name} that partially overlaps with the new assignment.\n'
-                    f'Previous assignment was {other_signal} = {old_value}, new assignment is {signal} = {value}.'
+                    f'Previous assignment was {assignment}, new assignment is {signal} = {value}.'
                     '\nRefusing to overwrite the signal.'
                 )
 
-            # Check equality of the signals by rendering them. This could cause false-negatives, but is the easiest way.
-            if overlap is True and value.render() != old_value.render():
-                raise ConflictingAssignmentError(
-                    f'State {self.name} already has an assignment to signal {signal.name}.\n'
-                    f'Previous value was {old_value}, new value would be {value}. Refusing to overwrite the signal.'
-                )
+            # Selector assignments prevent all other assignments
+            if overlap is True:
+                if isinstance(assignment, SelectorAssignment):
+                    raise ConflictingAssignmentError(
+                        f'State {self.name} already has an selector assignment to signal {signal.name}.\nIt is not possible to add another assignment.'
+                    )
 
-        self._assignments.append((signal, value, condition))
+                # Check equality of the signals by rendering them. This could cause false-negatives, but is the easiest way.
+                if value.render() != assignment.value.render():
+                    raise ConflictingAssignmentError(
+                        f'State {self.name} already has an assignment to signal {signal.name}.\n'
+                        f'Previous value was {assignment.value}, new value would be {value}. Refusing to overwrite the signal.'
+                    )
+
+        # Save new assignment
+        if condition is None:
+            self._assignments.append(Assignment(signal, value))
+        else:
+            self._assignments.append(ConditionalAssignment(signal, value, condition))
+
         self._assigned_signal_names.add(signal.name)
 
-    def get_assignment(self, signal: AssignmentTarget) -> Optional[Tuple[AssignmentTarget, Renderable, Renderable]]:
-        """Get current assignment for a signal.
+    def add_selector_assignment(self, signal: AssignmentTarget, selector: RenderableSelector, allow_short_circuit: bool = False) -> None:
+        """Add selector assignment to this state."""
+        if not self.allow_assignments:
+            raise ForbiddenAssignmentError(f'State {self.name} does not allow assignments.')
+
+        # Check if signal is already assigned
+        for assignment in self.get_assignments(signal):
+            # Regular assignment, test overlap
+            overlap = signal.overlaps_with(assignment.signal)
+
+            if overlap is not False:
+                raise ConflictingAssignmentError(
+                    f'State {self.name} already has an assignment to signal {signal.name}.\nIt is not possible to add a selector assignment.'
+                )
+
+        # Save new assignment
+        self._assignments.append(SelectorAssignment(signal, selector, allow_short_circuit=allow_short_circuit))
+        self._assigned_signal_names.add(signal.name)
+
+    def get_assignments(self, signal: AssignmentTarget) -> Iterator[AnyAssignment]:
+        """Iter over current assignment for a signal.
 
         Arguments:
             signal: The signal to search for.
 
-        Returns:
-            The current assignment for this signal or None, if it is not assigned.
-
-
-        !!! note: This returns only the first assignment and does not deal with conditional assigns!
+        Yields:
+            The current assignments for this signal.
         """
         # Use a set of the assigned signal names for quick check. In case of a match, search for the signal.
         if signal.name in self._assigned_signal_names:
-            for other_signal, value, condition in self.assignments:
+            for assignment in self.assignments:
                 # Check by signal name, will also find slices of the same signal
-                if signal.name == other_signal.name:
-                    return other_signal, value, condition
-        return None
+                if signal.name == assignment.signal.name:
+                    yield assignment
 
     # Transition Management
     @property
@@ -228,12 +448,32 @@ class State(NamedEntity):
 
         ret += 'Assignments: \n'
 
-        for target, value, condition in sorted(self.assignments, key=lambda x: str(x[0])):
-            ret += f'if {condition.render()}: {target} <= {value.render()} \n'
+        for assignment in sorted(self.assignments, key=lambda x: x.signal.render()):
+            if assignment.unconditional:
+                ret += f'{assignment.signal} <= {assignment.value}'  # type: ignore[union-attr]
+            else:
+                ret += '\n'.join(self._extract_conditional_assignment(assignment))  # type: ignore[arg-type]
+        ret += '\n'
 
         ret += 'Transitions: \n'
 
         for condition, next_state in self.transitions:
-            ret += f'If ({condition.render()}), then {next_state.name}\n'
+            ret += f'if ({condition.render()}), then {next_state.name}\n'
 
         return ret
+
+    @classmethod
+    def _extract_conditional_assignment(cls, assignment: Union[ConditionalAssignment, SelectorAssignment], indent: str = '') -> Iterable[str]:
+        """Extract conditional assignment for signature."""
+        for i, (condition, value) in enumerate(assignment.cases):
+            if i == 0:
+                ret = f'{indent}if ({condition}): '
+            else:
+                ret = f'{indent}elif ({condition}): '
+
+            if hasattr(value, 'cases'):
+                ret += f'\n{indent}'
+                ret += f'\n{indent}'.join(cls._extract_conditional_assignment(value, indent=indent + '    '))  # type: ignore[arg-type]
+            else:
+                ret += f'{assignment.signal} <= {value}'
+            yield ret

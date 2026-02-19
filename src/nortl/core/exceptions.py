@@ -1,8 +1,8 @@
 """This module defines exception types for noRTL."""
 
-from typing import TypeVar
+from typing import Mapping, Union
 
-from nortl.core.protocols import AssignmentTarget, Renderable
+from nortl.core.protocols import AssignmentTarget, Renderable, RenderableSelector
 
 __all__ = [
     'AccessAfterReleaseError',
@@ -19,10 +19,6 @@ __all__ = [
     'read_access',
     'write_access',
 ]
-
-
-T_Read = TypeVar('T_Read', bound=Renderable)
-T_Write = TypeVar('T_Write', bound=AssignmentTarget)
 
 
 # Access Violation Errors
@@ -74,19 +70,28 @@ class WriteViolationError(AccessViolationError):
     """This error occurs when an input signal, or otherwise read-only signal is written."""
 
 
-def read_access(object: T_Read) -> T_Read:
-    """Perform read access to renderable.
+def read_access[T: Union[Renderable, RenderableSelector]](object: T) -> T:
+    """Perform read access to renderable or renderable selector.
 
     This helper function hides the traceback caused during recursive read access.
     """
     try:
-        object.read_access()
+        if isinstance(object, Mapping):
+            # Perform read access on selector
+            for condition, level in object.items():
+                if isinstance(condition, str) and condition == 'default':
+                    pass
+                else:
+                    read_access(condition)
+                read_access(level)
+        else:
+            object.read_access()
     except AccessViolationError as e:
         raise e.with_traceback(None)
     return object
 
 
-def write_access(object: T_Write) -> T_Write:
+def write_access[T: AssignmentTarget](object: T) -> T:
     """Perform write access to signal.
 
     This helper function hides the traceback caused during recursive write access.

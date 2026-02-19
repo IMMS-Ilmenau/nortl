@@ -3,8 +3,9 @@ import pytest
 from nortl.core.engine import CoreEngine
 from nortl.core.exceptions import ConflictingAssignmentError, WriteViolationError
 from nortl.core.module import Module
-from nortl.core.operations import Var
+from nortl.core.operations import All, Any, Const, Var
 from nortl.core.signal import Signal
+from nortl.core.state import SelectorAssignment
 
 
 def test_engine_setup() -> None:
@@ -183,6 +184,112 @@ def test_engine_set_output_multiple_assignments_variable_slice() -> None:
 
     # Despite being very bad practice, reversed indexes are supported to
     engine.set(scratch_pad[1:2], 1)
+
+
+def test_engine_set_when() -> None:
+    """Test that the set_when method can be used correctly."""
+    engine = CoreEngine('my_engine')
+
+    ao22 = engine.define_output('ao22', reset_value=0)
+    a = engine.define_input('a')
+    b = engine.define_input('b')
+    c = engine.define_input('c')
+    d = engine.define_input('d')
+    engine.sync()
+
+    # emulate 2x2-Input AND into 2-Input OR
+    engine.set_when(
+        ao22,
+        {
+            (a & b): 1,
+            (c & d): 1,
+            'default': 0,
+        },
+    )
+
+    assert len(engine.current_state.assignments) == 1
+    assert isinstance(engine.current_state.assignments[0], SelectorAssignment)
+    assert len(engine.current_state.assignments[0].cases) == 2
+    assert engine.current_state.assignments[0].priority  #  Default is provided
+    assert engine.current_state.assignments[0].default.render() == '0'  # type: ignore[union-attr]
+
+
+def test_engine_set_when_nested() -> None:
+    """Test that the set_when method can be used correctly for nested selectors."""
+    engine = CoreEngine('my_engine')
+
+    mux4 = engine.define_output('mux4', reset_value=0)
+    sel0 = engine.define_input('sel0')
+    sel1 = engine.define_input('sel1')
+    a = engine.define_input('a')
+    b = engine.define_input('b')
+    c = engine.define_input('c')
+    d = engine.define_input('d')
+    engine.sync()
+
+    # emulate 4:1 MUX
+    engine.set_when(
+        mux4,
+        {
+            ~sel1: {
+                ~sel0: a,
+                sel0: b,
+            },
+            # One of the cases could use a default instead
+            sel1: {
+                ~sel0: c,
+                sel0: d,
+            },
+        },
+    )
+
+    assert len(engine.current_state.assignments) == 1
+    assert isinstance(engine.current_state.assignments[0], SelectorAssignment)
+    assert len(engine.current_state.assignments[0].cases) == 2
+    assert not engine.current_state.assignments[0].priority  #  Default is not provided
+    assert engine.current_state.assignments[0].default is None
+
+
+def test_engine_set_when_short_circuit() -> None:
+    """Test short correct circuiting behavior in selectors."""
+    engine = CoreEngine('my_engine')
+
+    sig = engine.define_output('sig', reset_value=0)
+    sel0 = engine.define_input('sel0')
+    sel1 = engine.define_input('sel1')
+    const0 = Const('0b0')
+    const1 = Const('0b1')
+    engine.sync()
+
+    # If a condition of the selector evaluates to constant False, it is filtered out
+    # Note: The All is not necessary here at all, but demonstrates how a constant-False value may propagate into the condition, e.g. from a constant
+    # parameter of the system
+    engine.set_when(sig, {sel0: 1, All(const0, sel1): 1})
+    assert isinstance(engine.current_state.assignments[0], SelectorAssignment)
+    assert len(engine.current_state.assignments[0].cases) == 1
+    engine.sync()
+
+    # If a condition of the selector evaluates to constant True, the behavior depends.
+    # If the selector does not appear to be priority encoded, due to missing 'default', it throws an exception:
+    with pytest.raises(RuntimeError):
+        engine.set_when(sig, {sel0: 1, Any(const1, sel1): 1})
+
+    # The short circuiting must be explicitely allowed.
+    # Note: the assignment still stays an selector assignment, despite having just one case
+    engine.set_when(sig, {sel0: 1, Any(const1, sel1): 1}, allow_short_circuit=True)
+    assert isinstance(engine.current_state.assignments[0], SelectorAssignment)
+    assert len(engine.current_state.assignments[0].cases) == 1
+    assert engine.current_state.assignments[0].cases[0][0].is_constant
+    assert engine.current_state.assignments[0].cases[0][0].value == 1  # type: ignore[attr-defined]
+    engine.sync()
+
+    # Alternatively, if the selector has a priority, the always True condition will override all following conditions and becomes the default
+    engine.set_when(sig, {All(~sel0, ~sel1): 1, Any(const1, sel1): 1, sel0: 0, 'default': 0})
+    assert isinstance(engine.current_state.assignments[0], SelectorAssignment)
+    assert len(engine.current_state.assignments[0].cases) == 1  # Only one case of the 3 left over
+    assert not engine.current_state.assignments[0].cases[0][0].is_constant
+    assert engine.current_state.assignments[0].default.is_constant  # type: ignore
+    assert engine.current_state.assignments[0].default.value == 1  # Note how the default is no longer 1
 
 
 def test_engine_wait_for() -> None:

@@ -126,6 +126,9 @@ class OperationTrait(metaclass=ABCMeta):
     def __format__(self, format_spec: str) -> str:
         return self.render()
 
+    def __hash__(self) -> int:
+        return hash(self.render())
+
     # Arithemtic Operations
     # TODO all two side operations loose the width
     def __add__(self, value: Operand, /) -> Renderable:
