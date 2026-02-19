@@ -427,7 +427,9 @@ class Segment[T: Union[EngineProto, HelperProto], **P, R: Optional[Union[AnySign
 
     The method may receive input arguments. The segment will be re-created for every call with different arguments by default.
 
-    It is possible to automatically copy all or selected inputs into the segment. This must be enabled by using a [@Segment.with_config()][nortl.core.constructs.segment.Segment.with_config] decorator. In this case, different inputs for the copied signals are ignored.
+    It is possible to automatically copy all or selected inputs into the segment.
+    This must be enabled by using a [@Segment.with_input_slots()][nortl.core.constructs.segment.Segment.with_input_slots] decorator.
+    In this case, different inputs for the copied signals are ignored.
 
     Note that the method must not access any Python variables that change over time.
 
