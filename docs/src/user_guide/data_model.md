@@ -94,3 +94,44 @@ The `Renderable` interface (not explicitly shown in the provided code but implie
 Along this way, constants are automatically combined on python level to make life of the synthesis flow easier. This is also used to clean out conditional transitions that are always on.
 
 This concept enables the system to handle complex expressions and signals uniformly, whether they're simple assignments or nested structures.
+
+#### Built-in Operations
+
+Renderable objects can be used in built-in arithmetic or logic operations, comparisons, sliced, and more.
+Performing one of the supported operations will return a new Renderable object.
+
+The following operations are supported:
+
+```ebnf
+operation               = two side operation | single operation | slice operation
+
+(* Two Side operations are based on two operands, of which at least one must be a Renderable. "*)
+two side operation      = left side operation | right side operation
+left side operation     = Renderable, twoside operator, (Renderable | int | bool)
+right side operation    = (int | bool), twoside operator, Renderable
+twoside operator        = arithmetic operator | logic operator | comparison operator
+arithmetic operator     = "+" | "-" | "*" | "/" | "%"
+logic operator          = "&" | "|" | "^" | "<<" | ">>"
+comparison operator     = "==" | "!=" | "<" | "<=" | ">" | ">="
+
+(* Single operations modify a Renderable. *)
+single operation        = modificator, Renderable
+modificator             = "+" | "-" | "~"
+
+(* Slice operations extract a single, or a range of bits from the operand. *)
+slice operation         = Renderable, "[", start, [":", stop], "]"
+start                   = int
+stop                    = int
+```
+
+The goal of noRTL is to support (most of) the same operations as integers do in Python and allow intuitive coding.
+
+As the result of the operation is a Renderable object, it can be stored in a Python variable, or directly used as an argument for a function expecting a Renderable.
+
+```python
+# Save operation result in a variable
+var = adr + 1
+
+# Use operation result as an function argument
+engine.set(OUT, (a + << 8) | b)
+```
