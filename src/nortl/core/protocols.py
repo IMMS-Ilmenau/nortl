@@ -1,6 +1,23 @@
+from contextlib import contextmanager
 from inspect import FrameInfo
-from types import TracebackType
-from typing import Any, ClassVar, Deque, Dict, Generic, List, Literal, Mapping, Optional, Protocol, Sequence, Set, Tuple, Type, TypeVar, Union
+from typing import (
+    Any,
+    ClassVar,
+    ContextManager,
+    Dict,
+    Generic,
+    Iterator,
+    List,
+    Literal,
+    Mapping,
+    Optional,
+    Protocol,
+    Sequence,
+    Set,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 from typing_extensions import Self
 
@@ -223,20 +240,13 @@ class StateProto(NamedEntityProto, Protocol):
 
 
 class ScratchManagerProto(Protocol):
-    engine: 'EngineProto'
-    scratch_signals: Deque['ScratchSignalProto']
-    scratchpad_width: int
-
     @property
-    def scratchpad(self) -> 'SignalProto': ...
+    def engine(self) -> 'EngineProto': ...
 
-    def create(self, width: int) -> 'ScratchSignalProto': ...
+    # Scratch signal management
+    def create_signal(self, width: int) -> 'ScratchSignalProto': ...
 
-    @property
-    def scratch_map(self) -> List[bool]: ...
-
-    def alloc(self, width: int) -> Optional[int]: ...
-
+    # Context managememt
     def enter_context(self) -> None: ...
 
     def exit_context(self) -> None: ...
@@ -244,6 +254,77 @@ class ScratchManagerProto(Protocol):
     def force_release_signals_by_thread(self, thread: 'ThreadProto') -> None: ...
 
     def free_accesses_from_thread(self, thread: 'ThreadProto') -> None: ...
+
+    # Memory zone managment
+    @property
+    def zones(self) -> Sequence['MemoryZoneProto']: ...
+
+    @property
+    def main_zone(self) -> 'MemoryZoneProto': ...
+
+    @property
+    def active_zone(self) -> 'MemoryZoneProto': ...
+
+    @property
+    def suspended_zones(self) -> Sequence['MemoryZoneProto']: ...
+
+    def create_zone(self, name: Optional[str] = None) -> 'MemoryZoneProto': ...
+
+
+class MemoryZoneProto(ContextManager['MemoryViewProto'], Protocol):
+    @property
+    def manager(self) -> ScratchManagerProto: ...
+
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def id(self) -> int: ...
+
+    # Scratch pad
+    width: int
+
+    @property
+    def scratchpad(self) -> 'SignalProto': ...
+
+    @property
+    def scratch_map(self) -> Sequence[bool]: ...
+
+    def alloc(self, width: int) -> Optional[int]: ...
+
+    # Scratch signal management
+    @property
+    def scratch_signals(self) -> Sequence['ScratchSignalProto']: ...
+
+    def create_signal(self, width: int) -> 'ScratchSignalProto': ...
+
+    # Activation and view management
+    @property
+    def active(self) -> bool: ...
+
+    @property
+    def suspended(self) -> bool: ...
+
+    @property
+    def active_view(self) -> 'MemoryViewProto': ...
+
+    @property
+    def views(self) -> Sequence['MemoryViewProto']: ...
+
+    @contextmanager
+    def recover(self, view: 'MemoryViewProto') -> Iterator[None]: ...
+
+
+class MemoryViewProto(Protocol):
+    @property
+    def zone(self) -> MemoryZoneProto: ...
+
+    @property
+    def scratch_signals(self) -> Sequence['ScratchSignalProto']: ...
+
+    def create_signal(self, width: int) -> 'ScratchSignalProto': ...
+
+    def _register_signal(self, signal: 'ScratchSignalProto') -> None: ...
 
 
 class SignalManagerProto(Protocol):
@@ -523,18 +604,17 @@ class SignalProto(_EventSourceSignalProto['SignalProto'], _BaseSignalProto, Prot
 
 
 class SignalSliceProto(_BaseSliceProto, _EventSourceSignalProto['SignalSliceProto'], Protocol):
-    def as_scratch_signal(self) -> 'ScratchSignalProto': ...
+    def as_scratch_signal(self, zone: Optional[MemoryZoneProto] = None) -> 'ScratchSignalProto': ...
 
 
-class ScratchSignalProto(_BaseSliceProto, Protocol):
+class ScratchSignalProto(_BaseSliceProto, ContextManager['ScratchSignalProto'], Protocol):
     creator_frames: Sequence[FrameInfo]
 
     @property
     def owner(self) -> 'ThreadProto': ...
 
-    def __enter__(self) -> Self: ...
-
-    def __exit__(self, exc_type: Optional[Type[BaseException]], exc_val: Optional[BaseException], exc_tb: Optional[TracebackType]) -> None: ...
+    @property
+    def zone(self) -> MemoryZoneProto: ...
 
     def enter_context(self) -> None: ...
 
@@ -544,6 +624,8 @@ class ScratchSignalProto(_BaseSliceProto, Protocol):
     def released(self) -> bool: ...
 
     def release(self, force: bool = False) -> None: ...
+
+    def reclaim(self) -> None: ...
 
     def states_disjoint(self, other: Self) -> bool: ...
 

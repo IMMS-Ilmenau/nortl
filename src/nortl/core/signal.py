@@ -20,6 +20,7 @@ from nortl.core.protocols import (
     SIGNAL_TYPES,
     AssignmentTarget,
     EngineProto,
+    MemoryZoneProto,
     ModuleInstanceProto,
     ParameterProto,
     Renderable,
@@ -544,7 +545,7 @@ class _BaseSlice(_BaseSignal):
             if isinstance(signal.width, int) and index not in range(0, signal.width):
                 raise IndexError(f'Index {index} is out of bounds for signal {signal.name} with width {signal.width}')
 
-            self._width: int = 1
+            self._width = 1
             self._bitorder: Optional[BIT_ORDER] = None
         else:
             start, stop, bitorder = validate_slice(index)
@@ -745,23 +746,31 @@ class SignalSlice(_BaseSlice, _EventSourceSignal[SignalSliceProto]):
         """Thread performing the last write access."""
         self.base_signal.last_write_access_thread = value
 
-    def as_scratch_signal(self) -> 'ScratchSignal':
+    def as_scratch_signal(self, zone: Optional[MemoryZoneProto] = None) -> 'ScratchSignal':
         """Turn SignalSlice into ScratchSignal, owned by the current thread."""
-        return ScratchSignal(self.base_signal, self.index)
+        if zone is None:
+            zone = self.engine.scratch_manager.active_zone
+        return ScratchSignal(self.base_signal, self.index, zone)
 
 
 class ScratchSignal(_BaseSlice, _AccessControlledSignal):
     """A scratch signal is a special kind of signal slice, that is only valid for a limited time."""
 
-    def __init__(self, signal: SignalProto, index: Union[int, IntSlice]) -> None:
+    def __init__(self, signal: SignalProto, index: Union[int, IntSlice], zone: Optional[MemoryZoneProto] = None) -> None:
         super().__init__(signal, index)
 
-        self._owner = signal.engine.current_thread
+        # Register scratch signal
+        # This is done here, to correctly register slices of scratch registers
+        if zone is None:
+            zone = self.engine.scratch_manager.active_zone
+        zone.active_view._register_signal(self)
 
         # Access control for scratch signals
-        self._released: bool = False
-        self._context_ctr: int = 0
-        self._context_ctr_active: bool = True
+        self._owner = signal.engine.current_thread
+        self._released = False
+        self._context_ctr = 0
+        self._context_ctr_active = True
+        self._zone = zone
 
         # Remember, where the scratch signal was created
         self.creator_frames = self.engine.tracer.current_trace
@@ -770,6 +779,11 @@ class ScratchSignal(_BaseSlice, _AccessControlledSignal):
     def owner(self) -> ThreadProto:
         """Owner of this scratch signal."""
         return self._owner
+
+    @property
+    def zone(self) -> MemoryZoneProto:
+        """Memory zone for this scratch signal."""
+        return self._zone
 
     def __enter__(self) -> Self:
         return self
@@ -814,7 +828,7 @@ class ScratchSignal(_BaseSlice, _AccessControlledSignal):
             AccessAfterReleaseError: If the scratch signal was released.
         """
         if self.released:
-            raise AccessAfterReleaseError('Tried to write to a signal that has been released previously!')
+            raise AccessAfterReleaseError(f'Signal {self} was accessed after being released.')
         super().write_access(ignore=ignore)
 
     def read_access(self, ignore: Set[ACCESS_CHECKS] = set()) -> None:
@@ -873,9 +887,34 @@ class ScratchSignal(_BaseSlice, _AccessControlledSignal):
             return not self.owner.running
         return self._released
 
+    def reclaim(self) -> None:
+        """Reclaim the scratch signal.
+
+        This is dangerous and meant to be used for internal purposes.
+
+        Even if the ressource can be reclaimed without collisions, the data within may no longer be valid. This entirely depends on where (in whichs state) the signal was reclaimed.
+        """
+        if not self.released:
+            raise RuntimeError('Scratch signal was not released before reclaim. This indicates internal issues.')
+        if (active_zone := self.engine.scratch_manager.active_zone) is not self.zone:
+            raise RuntimeError(f'Scratch signal belongs to memory zone {self.zone.name} and cannot be reclaimed from zone {active_zone.name}.')
+        if self not in self.zone.scratch_signals:
+            raise RuntimeError(
+                f'Scratch signal does not belong to the active view of memory zone {self.zone.name} and can therefore not be reclaimed.'
+            )
+
+        self._owner = self.engine.current_thread
+        self._context_ctr = 0
+        self._context_ctr_active = True
+        self._released = False
+
     def release(self, force: bool = False) -> None:
+        """Release the scratch signal.
+
+        After the signal has been released, it's allocated space is freed up and can be re-used by other signals.
+        """
         if self.owner != self.base_signal.engine.current_thread and not force:
-            raise ValueError('Scratch register may only be released in owning thread!')
+            raise ValueError('Scratch signal may only be released in owning thread!')
         if self._context_ctr != 0 and not force:
             raise ValueError('Scratch signals need to be released in the context where they were created!')
 

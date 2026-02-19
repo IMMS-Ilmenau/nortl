@@ -3,11 +3,13 @@
 from .condition import Condition, ElseCondition
 from .fork_join import Fork
 from .loop import ForLoop, WhileLoop
+from .segment import Segment
 
 __all__ = [
     'Condition',
     'ElseCondition',
     'ForLoop',
     'Fork',
+    'Segment',
     'WhileLoop',
 ]

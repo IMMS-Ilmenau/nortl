@@ -71,7 +71,7 @@ class AccessAfterReleaseError(AccessViolationError):
 
 
 class WriteViolationError(AccessViolationError):
-    """This error occurs when an input signal is written."""
+    """This error occurs when an input signal, or otherwise read-only signal is written."""
 
 
 def read_access(object: T_Read) -> T_Read:

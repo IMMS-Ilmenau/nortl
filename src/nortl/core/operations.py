@@ -991,6 +991,8 @@ class LogicalOperation(SequenceOperation):
         # Fold constants
         self._fold_constants()
 
+        # FIXME Remove constants (0x1 for All, 0x0 for Any)
+
     # Implement OperationTrait
     @property
     def operand_width(self) -> Literal[1]:

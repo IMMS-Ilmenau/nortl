@@ -1,21 +1,33 @@
 """Modifiers can be applied to Renderables."""
 
-from typing import Generic, Literal, Optional, Set, TypeVar, Union
+from contextlib import ExitStack
+from typing import Generic, Literal, Never, Optional, Self, Set, TypeVar, Union
 
+from nortl.core.exceptions import WriteViolationError
 from nortl.core.operations import OperationTrait
-from nortl.core.protocols import ACCESS_CHECKS, SIGNAL_ACCESS_CHECKS, AnySignal, AssignmentTarget, EngineProto, Renderable
+from nortl.core.protocols import (
+    ACCESS_CHECKS,
+    SIGNAL_ACCESS_CHECKS,
+    AnySignal,
+    AssignmentTarget,
+    EngineProto,
+    PermanentSignal,
+    Renderable,
+)
 
 __all__ = [
     'UnregisteredRead',
     'Volatile',
+    'WeakReference',
 ]
 
 T_Content = TypeVar('T_Content', bound=Renderable)
 T_Signal = TypeVar('T_Signal', bound=AnySignal)
+T_PermanentSignal = TypeVar('T_PermanentSignal', bound=PermanentSignal)
 
 
 # Modifiers
-class BaseModifier(Generic[T_Content], OperationTrait):
+class BaseModifier(Generic[T_Content], OperationTrait, ExitStack):
     """Baseclass for Modifiers."""
 
     def __init__(self, content: T_Content) -> None:
@@ -145,6 +157,93 @@ class Volatile(Generic[T_Signal], BaseModifier[T_Signal]):
     def write_access(self, ignore: Set[ACCESS_CHECKS] = set()) -> None:
         """Register write access from the current thread."""
         self.content.write_access(ignore=ignore | self.ignore)
+
+    def overlaps_with(self, other: AssignmentTarget) -> Union[bool, Literal['partial']]:
+        """Check if signal overlaps with other signal or signal slice."""
+        return self.content.overlaps_with(other)
+
+
+class ReadOnly(Generic[T_Signal], BaseModifier[T_Signal]):
+    """Modifier for signals to mark them as read-only.
+
+    Writing to a noRTL signal that is wrapped in a ReadOnly modifier will throw an Access Violation.
+    """
+
+    # Implement OperationTrait
+    def read_access(self, ignore: Set[ACCESS_CHECKS] = set()) -> None:
+        """Register read access from the current thread, state and construct depth."""
+        self.content.read_access(ignore=ignore)
+
+    # Implement AssignmentTarget
+    @property
+    def name(self) -> str:
+        """Just return name."""
+        return self.content.name
+
+    @property
+    def engine(self) -> EngineProto:
+        """NoRTL engine that the signal belongs to."""
+        return self.content.engine
+
+    def write_access(self, ignore: Set[ACCESS_CHECKS] = set()) -> Never:
+        """Register write access from the current thread."""
+        raise WriteViolationError(f'Signal {self.name} is marked as read-only.')
+
+    def overlaps_with(self, other: AssignmentTarget) -> Union[bool, Literal['partial']]:
+        """Check if signal overlaps with other signal or signal slice."""
+        return self.content.overlaps_with(other)
+
+    # Emulate Scratch Signal
+    def __enter__(self) -> Self:
+        if hasattr(self.content, '__enter__'):
+            self.enter_context(self.content)  # type: ignore
+        return self
+
+
+class WeakReference(Generic[T_PermanentSignal], BaseModifier[T_PermanentSignal]):
+    """Modifier for signals to mark them as weak references to the underlying signal.
+
+    The reference can be expired at any time.
+    """
+
+    def __init__(self, content: T_PermanentSignal):
+        super().__init__(content)
+        self._expired = False
+
+    @property
+    def expired(self) -> bool:
+        """Indicates if this signal is expired."""
+        return self._expired
+
+    def expire(self) -> None:
+        """Marks this signal as expired. Any further access is forbidden."""
+        self._expired = True
+
+    # Implement OperationTrait
+    def read_access(self, ignore: Set[ACCESS_CHECKS] = set()) -> None:
+        """Register read access from the current thread, state and construct depth."""
+        if self.expired:
+            raise RuntimeError(
+                f'Signal {self.name} is expired.\nThis can happen, if the signal was returned from a segment and the segment was called again, making this reference to the signal invalid.'
+            )
+        self.content.read_access(ignore=ignore)
+
+    # Implement AssignmentTarget
+    @property
+    def name(self) -> str:
+        """Just return name."""
+        return self.content.name
+
+    @property
+    def engine(self) -> EngineProto:
+        """NoRTL engine that the signal belongs to."""
+        return self.content.engine
+
+    def write_access(self, ignore: Set[ACCESS_CHECKS] = set()) -> None:
+        """Register write access from the current thread."""
+        if self.expired:
+            raise RuntimeError(f'Signal {self.name} is expired.')
+        self.content.write_access(ignore=ignore)
 
     def overlaps_with(self, other: AssignmentTarget) -> Union[bool, Literal['partial']]:
         """Check if signal overlaps with other signal or signal slice."""

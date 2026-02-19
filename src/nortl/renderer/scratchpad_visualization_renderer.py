@@ -1,7 +1,7 @@
 import re
 from typing import Dict, List, Set, Tuple, Union
 
-from nortl.core.protocols import EngineProto, ScratchSignalProto
+from nortl.core.protocols import EngineProto, MemoryZoneProto, ScratchSignalProto
 
 
 def sort_by_nat_split(x: str) -> Tuple[Union[int, str], ...]:
@@ -37,7 +37,7 @@ class ScratchpadVisualizationRenderer:
 
     def __init__(self, engine: EngineProto, include_modules: bool = True, clock_gating: bool = False):
         self.engine = engine
-        self.scratch_map: Dict[str, List[Tuple[str, int, int]]] = {}  # Map state name to list of
+        self.scratch_maps: Dict[str, Dict[MemoryZoneProto, List[Tuple[str, int, int]]]] = {}  # Map state name to list of
         self.set_of_labels: Set[str] = set()
         self.list_of_labels: List[str] = []
         self.map_label_to_htmlcolor: Dict[str, str] = {}
@@ -48,28 +48,35 @@ class ScratchpadVisualizationRenderer:
         return ret
 
     def _generate_map(self) -> None:
-        length = self.engine.scratch_manager.scratchpad_width
-        for statelist in self.engine.states.values():
-            for state in statelist:
-                new_lst = []
+        for worker_states in self.engine.states.values():
+            for state in worker_states:
+                zone_map: Dict[MemoryZoneProto, List[Tuple[str, int, int]]] = dict()
+                for zone in self.engine.scratch_manager.zones:
+                    new_lst = []
 
-                for scratch_signal in state.active_scratch_signals:
-                    if isinstance(scratch_signal.index, slice):
-                        bits = list(scratch_signal.index.indices(length))
+                    for scratch_signal in state.active_scratch_signals:
+                        if len(scratch_signal.creator_frames) == 0:
+                            continue
+                        if zone is not scratch_signal.zone:
+                            continue
+                        if isinstance(scratch_signal.index, slice):
+                            bits = list(scratch_signal.index.indices(zone.width))
 
-                        if bits[1] < bits[0]:
-                            bits[0], bits[1] = bits[1], bits[0]
+                            if bits[1] < bits[0]:
+                                bits[0], bits[1] = bits[1], bits[0]
 
-                        # Include last bit in range
-                        bits[1] += 1
+                            # Include last bit in range
+                            bits[1] += 1
 
-                        new_lst.append((self._extract_frame_info(scratch_signal), bits[0], bits[1] - bits[0]))
-                    else:
-                        new_lst.append((self._extract_frame_info(scratch_signal), scratch_signal.index, 1))
+                            new_lst.append((self._extract_frame_info(scratch_signal), bits[0], bits[1] - bits[0]))
+                        else:
+                            new_lst.append((self._extract_frame_info(scratch_signal), scratch_signal.index, 1))
 
-                    self.set_of_labels.add(self._extract_frame_info(scratch_signal))
+                        self.set_of_labels.add(self._extract_frame_info(scratch_signal))
 
-                self.scratch_map[state.name] = sorted(new_lst, key=lambda x: x[1])
+                    zone_map[zone] = sorted(new_lst, key=lambda x: x[1])
+
+                self.scratch_maps[state.name] = zone_map
 
     def generate_colors(self, n: int) -> List[str]:
         """Creats n different colors that should actually look different."""
@@ -113,28 +120,32 @@ class ScratchpadVisualizationRenderer:
         retlst = ['<table>']
 
         retlst.append('<tr>')
-        retlst.extend(['<td></td>' for _ in range(self.engine.scratch_manager.scratchpad_width + 1)])
+        retlst.append('<td></td>')
+        retlst.extend([f'<td colspan="{zone.width}">Zone {zone.id}<br>{zone.width} Bit</td>' for zone in self.engine.scratch_manager.zones])
         retlst.append('</tr>')
 
-        for statename in sorted(list(self.scratch_map.keys()), key=lambda x: sort_by_nat_split(x)):
+        for statename in sorted(list(self.scratch_maps.keys()), key=lambda x: sort_by_nat_split(x)):
             retlst.append('<tr>')
-
             retlst.append(f'<td>{statename}</td>')
 
-            next_pos = 0
-            for item, pos, length in self.scratch_map[statename]:
-                if next_pos != pos:
-                    retlst.append(f'<td colspan="{pos - next_pos}"></td>')
-                next_pos = pos + length
+            for zone, entry in self.scratch_maps[statename].items():
+                next_pos = 0
+                for item, pos, length in entry:
+                    if next_pos != pos:
+                        retlst.append(f'<td colspan="{pos - next_pos}" style="background-color: #F0F0F0"></td>')
+                    next_pos = pos + length
 
-                frameinfo = ''
-                if show_frameinfo:
-                    frameinfo = item
+                    frameinfo = ''
+                    if show_frameinfo:
+                        frameinfo = item
 
-                if item != '':
-                    retlst.append(f'<td style="background-color: {self.map_label_to_htmlcolor[item]}" colspan="{length}">{frameinfo}</td>')
-                else:
-                    retlst.append('<td></td>')
+                    if item != '':
+                        retlst.append(f'<td style="background-color: {self.map_label_to_htmlcolor[item]}" colspan="{length}">{frameinfo}</td>')
+                    else:
+                        retlst.append('<td></td>')
+
+                if next_pos != zone.width:
+                    retlst.append(f'<td colspan="{zone.width - next_pos}" style="background-color: #F0F0F0"></td>')
 
             retlst.append('</tr>')
 

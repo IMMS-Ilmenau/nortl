@@ -245,6 +245,9 @@ class VerilogCase:
 class VerilogIf:
     """Represents a Verilog if-else statement.
 
+    Args:
+        condition: The condition for the if statement.
+
     Example:
         >>> if_stmt = VerilogIf("reset")
         >>> if_stmt.true_branch.add(VerilogAssignment("state", "IDLE"))

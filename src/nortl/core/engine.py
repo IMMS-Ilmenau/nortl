@@ -316,7 +316,7 @@ class CoreEngine:
         Arguments:
             width: Width of the signal in bits.
         """
-        return self.scratch_manager.create(width)
+        return self.scratch_manager.create_signal(width)
 
     # Parameter Managment
     @property

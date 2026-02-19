@@ -8,10 +8,10 @@ from contextlib import contextmanager
 from typing import Iterator, Union
 
 from nortl import verilog_library
-from nortl.algorithms import EmptyStateRemovalMixin, ReachabilityAnalysisMixin, ScratchReorderingMixin, StateMergerMixin
+from nortl.algorithms import EmptyStateRemovalMixin, ReachabilityAnalysisMixin, StateMergerMixin
 from nortl.components import Channel, ElasticChannel, Timer
 from nortl.core import All, Any, Concat, Const, CoreEngine, IfThenElse, Var, Volatile, enable_tracing, to_renderable
-from nortl.core.constructs import Condition, ElseCondition, Fork, ForLoop, WhileLoop
+from nortl.core.constructs import Condition, ElseCondition, Fork, ForLoop, Segment, WhileLoop
 from nortl.core.protocols import ParameterProto, Renderable
 
 __all__ = [
@@ -22,6 +22,7 @@ __all__ = [
     'CoreEngine',
     'Engine',
     'IfThenElse',
+    'Segment',
     'Var',
     'Volatile',
     'enable_tracing',
@@ -211,7 +212,6 @@ class Engine(
     ConstructsMixin,
     ManagementMixin,
     ReachabilityAnalysisMixin,
-    ScratchReorderingMixin,
     StateMergerMixin,
     EmptyStateRemovalMixin,
     CoreEngine,

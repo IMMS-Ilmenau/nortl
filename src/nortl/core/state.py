@@ -56,7 +56,11 @@ class State(NamedEntity):
         self.engine.tracer.add_metadata(self, 'stack@creation', profile=True)
 
         # Store all currently active scratch signals for later scratch pad optimization
-        self.active_scratch_signals = [s for s in self.engine.scratch_manager.scratch_signals if not s.released]
+        self.active_scratch_signals = [
+            s for s in self.engine.scratch_manager.active_zone.scratch_signals if not s.released and s.owner == self.engine.current_thread
+        ]
+        for zone in self.engine.scratch_manager.suspended_zones:
+            self.active_scratch_signals.extend([s for s in zone.scratch_signals if not s.released and s.owner == self.engine.current_thread])
 
     @property
     def engine(self) -> EngineProto:
