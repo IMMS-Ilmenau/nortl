@@ -82,11 +82,15 @@ with engine.while_loop(Const(1)):
 
 # Generate SystemVerilog code
 from nortl.renderer import VerilogRenderer
-renderer = VerilogRenderer()
-verilog_code = renderer.render(engine)
+renderer = VerilogRenderer(engine)
+verilog_code = renderer.render()
 
 print(verilog_code)
 ```
+
+## Citation
+If you use noRTL in your research, please cite consider adding a citation!
+
 
 ## Acknowledgement
 
