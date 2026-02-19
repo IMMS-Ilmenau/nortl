@@ -1,6 +1,6 @@
 """Core Engine."""
 
-from typing import ClassVar, Dict, Mapping, Optional, Sequence, Set, Tuple, Union
+from typing import Any, ClassVar, Dict, Mapping, Optional, Sequence, Set, Tuple, Union
 
 from nortl.core.exceptions import OwnershipError, TransitionLockError, read_access, write_access
 from nortl.core.manager import ScratchManager, SignalManager
@@ -58,6 +58,7 @@ class CoreEngine:
         self._scratch_manager = ScratchManager(self)
         self._modules: Dict[str, Module] = {}
         self._module_instances: Dict[str, ModuleInstance] = {}
+        self.state_metadata_template: Dict[str, Any] = {}
 
         # Workers
         self._workers: Dict[str, Worker] = {}
@@ -89,7 +90,7 @@ class CoreEngine:
         """Set of the names of all states for this engine."""
         return set().union(*(worker.state_names for worker in self.workers.values()))
 
-    def create_state(self, name: Optional[str] = None, allow_assignments: bool = True) -> State:
+    def create_state(self, name: Optional[str] = None, allow_assignments: bool = True, metadata: Dict[str, Any] = {}) -> State:
         """Create a new state for the current worker.
 
         Arguments:
@@ -99,11 +100,14 @@ class CoreEngine:
                 If the current worker is not the main worker, the name of the state must be prefixed with the name of the current worker.
                 The prefix is automatically added, if missing.
             allow_assignments: If the state allows assignments. This is used for internal purposes.
+            metadata: Metadatafor the new state. If not given, the current self.state_metadata_template will be used.
 
         Returns:
             The created state.
         """
-        return self.current_worker.create_state(name=name, allow_assignments=allow_assignments)
+        if metadata == {}:
+            metadata = self.state_metadata_template
+        return self.current_worker.create_state(name=name, allow_assignments=allow_assignments, metadata=metadata)
 
     @property
     def current_state(self) -> State:

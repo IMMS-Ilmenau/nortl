@@ -1,5 +1,5 @@
 import math
-from typing import List, Optional, Sequence, Set
+from typing import Any, Dict, List, Optional, Sequence, Set
 
 from typing_extensions import Self
 
@@ -183,7 +183,7 @@ class Worker(NamedEntity):
         """Set of the names of all states for this worker."""
         return self._state_names
 
-    def create_state(self, name: Optional[str] = None, allow_assignments: bool = True) -> State:
+    def create_state(self, name: Optional[str] = None, allow_assignments: bool = True, metadata: Dict[str, Any] = {}) -> State:
         """Create a state.
 
         Arguments:
@@ -193,6 +193,7 @@ class Worker(NamedEntity):
                 If this worker is not the main worker, the name of the state must be prefixed with the name of the current worker.
                 The prefix is automatically added, if missing.
             allow_assignments: If the state allows assignments. This is used for internal purposes.
+            metadata: The metadata that will be added to the newly created state. If not given, the engine's state_metadata_template will be used.
 
         Returns:
             The created state.
@@ -204,8 +205,17 @@ class Worker(NamedEntity):
         if len(self.states) > 0 and len(self.threads) == 0:
             raise RuntimeError('Worker has no thread, unable to create new states.')
 
+        # Use engine's metadata template if no metadata is provided
+        if metadata == {}:
+            metadata = self.engine.state_metadata_template
+
         # State will validate the name
         state = State(self, name, allow_assignments=allow_assignments)
+
+        # Store given metadata in state
+        for k, v in metadata.items():
+            state.set_metadata(k, v)
+
         self._states.append(state)
         return state
 

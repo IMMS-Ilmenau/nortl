@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from typing import Iterator, Union
 
 from nortl import verilog_library
-from nortl.algorithms import ReachabilityAnalysisMixin, ScratchReorderingMixin, StateMergerMixin
+from nortl.algorithms import EmptyStateRemovalMixin, ReachabilityAnalysisMixin, ScratchReorderingMixin, StateMergerMixin
 from nortl.components import Channel, ElasticChannel, Timer
 from nortl.core import All, Any, Concat, Const, CoreEngine, IfThenElse, Var, Volatile, enable_tracing, to_renderable
 from nortl.core.constructs import Condition, ElseCondition, Fork, ForLoop, WhileLoop
@@ -191,8 +191,31 @@ class ManagementMixin(CoreEngine):
         yield
         self.scratch_manager.exit_context()
 
+    @contextmanager
+    def collapse_sync(self) -> Iterator[None]:
+        """Marks all states as collapsable. This means, that all empty states (engine.sync() without assignments) may be removed by an optimzation."""
+        # Use a counter to handle nested contexts
+        if 'collapse_sync_depth' not in self.state_metadata_template:
+            self.state_metadata_template['collapse_sync_depth'] = 0
+        self.state_metadata_template['collapse_sync_depth'] += 1
+        if self.state_metadata_template['collapse_sync_depth'] == 1:
+            self.state_metadata_template['collapsable'] = True
+        yield
+        self.state_metadata_template['collapse_sync_depth'] -= 1
+        if self.state_metadata_template['collapse_sync_depth'] == 0:
+            self.state_metadata_template['collapsable'] = False
 
-class Engine(ComponentsMixin, ConstructsMixin, ManagementMixin, ReachabilityAnalysisMixin, ScratchReorderingMixin, StateMergerMixin, CoreEngine):
+
+class Engine(
+    ComponentsMixin,
+    ConstructsMixin,
+    ManagementMixin,
+    ReachabilityAnalysisMixin,
+    ScratchReorderingMixin,
+    StateMergerMixin,
+    EmptyStateRemovalMixin,
+    CoreEngine,
+):
     """noRTL Engine.
 
     The Engine class is the main entry point for creating noRTL-based code generation.

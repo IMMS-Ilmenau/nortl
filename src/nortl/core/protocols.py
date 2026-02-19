@@ -273,7 +273,7 @@ class _StateManager(Protocol):
     @property
     def state_names(self) -> Set[str]: ...
 
-    def create_state(self, name: Optional[str] = None, allow_assignments: bool = True) -> 'StateProto': ...
+    def create_state(self, name: Optional[str] = None, allow_assignments: bool = True, metadata: Dict[str, Any] = {}) -> 'StateProto': ...
 
     @property
     def current_state(self) -> 'StateProto': ...
@@ -293,6 +293,7 @@ class EngineProto(_StateManager, Protocol):
     MAIN_THREAD_NAME: ClassVar[str]
 
     module_name: str
+    state_metadata_template: Dict[str, Any]
 
     # Tracing
     @property
