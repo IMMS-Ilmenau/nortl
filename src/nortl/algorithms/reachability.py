@@ -26,10 +26,13 @@ class ReachabilityAnalysisMixin(CoreEngine):
         The iteration startes at the reset state of the main_worker.
         """
         # First, set all states as unreachable and unvisited
-
         for statelist in self.states.values():
             for state in statelist:
                 state.set_metadata(self.REACHABILITY_KEY, False)
+
+        # Mark all reset states as reached
+        for worker in self.workers.values():
+            worker.reset_state.set_metadata(self.REACHABILITY_KEY, True)
 
         # Start analysis at the reset state of the main worker
         self._reachability_visit(self.main_worker.reset_state)
