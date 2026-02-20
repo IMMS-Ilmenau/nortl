@@ -133,7 +133,7 @@ class EngineContext:
 
             # Resize it to support the number of calls for this level, if necessary
             width: Var = return_address.width  # type: ignore[assignment]
-            if width < (min_width := max(1, ceil(log2(min_calls)))):
+            if width < (min_width := ceil(log2(min_calls + 1))):
                 width.update(min_width)
         return return_address
 
