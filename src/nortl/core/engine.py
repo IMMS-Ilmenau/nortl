@@ -375,6 +375,18 @@ class CoreEngine:
         This is non-blocking, you can set multiple signals at the same time.
         Use sync(), wait_for() or jump_if() to apply all signals and move to the next state.
 
+        !!! warning
+            Selector assignments bypass the check for conflicting assignments, if there is a partial overlap between two unconditional assignment!
+
+            This means, if two overlapping slices of the same signals have conditional assignments, no [ConflictingAssignmentError][nortl.core.exceptions.ConflictingAssignmentError] is raised.
+
+        !!! danger
+            This is a power-user feature. Use only when experienced!
+
+            The selector assign lead to race conditions when the assignment selectors depend on signals that are assigned in the same clock cycle
+            from other workers. This cannot be checked for safety in the current code and will pass all existing checks silently.
+            For safe use, only use selector assigns on static values, i.e. register values that cannot change in the current cycle (e.g. by other threads).
+
         Arguments:
             signal: The signal to be set.
             selector: Mapping of conditions to levels. When a condition is met, the signal is set to this level.
@@ -394,12 +406,6 @@ class CoreEngine:
                 always True, the other conditions would be unreachable. This is a violation of the rules of `unique if`.
                 If `allow_short_circuit` is True, noRTL will remove all other conditions, and only keep the always-True condition.
                 If it is False , noRTL will raise an exception to avoid downstream issues in the Verilog code.
-
-        !!! warning
-            Selector assignments bypass the check for conflicting assignments, if there is a partial overlap between two unconditional assignment!
-
-            This means, if two overlapping slices of the same signals have conditional assignments, no [ConflictingAssignmentError][nortl.core.exceptions.ConflictingAssignmentError] is raised.
-
 
         Example:
             The following example defines a 2x2 Input AND into 2-Input OR gate.
