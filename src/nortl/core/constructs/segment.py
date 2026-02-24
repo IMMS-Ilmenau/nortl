@@ -22,6 +22,7 @@ from typing import (
     overload,
 )
 
+from nortl.core.constructs.utils import FastForwarder
 from nortl.core.modifiers import BaseModifier, WeakReference
 from nortl.core.operations import Const, Var, to_renderable
 from nortl.core.protocols import (
@@ -30,6 +31,7 @@ from nortl.core.protocols import (
     MemoryViewProto,
     MemoryZoneProto,
     PermanentSignal,
+    Renderable,
     ScratchSignalProto,
     SignalProto,
     StateProto,
@@ -87,8 +89,7 @@ class EngineContext:
 
     def __init__(self, engine: EngineProto) -> None:
         self.engine = engine
-        self._call_depths: Dict[WorkerProto, int] = {}
-        self._return_addresses: Dict[WorkerProto, Dict[int, SignalProto]] = {}
+        self.return_addresses: Dict[WorkerProto, SignalProto] = {}
         self._segments: List[SegmentImplementation[Any, Any, Any]] = []
 
     @property
@@ -97,43 +98,30 @@ class EngineContext:
         return self.engine.current_worker
 
     @property
-    def call_depth(self) -> int:
-        """Current call depth for current worker."""
-        if self.current_worker not in self._call_depths:
-            self._call_depths[self.current_worker] = 0
-        return self._call_depths[self.current_worker]
-
-    @call_depth.setter
-    def call_depth(self, value: int) -> None:
-        """Current call depth for current worker."""
-        self._call_depths[self.current_worker] = value
-
-    @property
-    def return_addresses(self) -> Dict[int, SignalProto]:
-        """Mapping of return addresses for the current worker."""
-        if self.current_worker not in self._return_addresses:
-            self._return_addresses[self.current_worker] = {}
-        return self._return_addresses[self.current_worker]
+    def return_address(self) -> SignalProto:
+        """Return address for current worker."""
+        return self.return_addresses[self.current_worker]
 
     def get_return_address(self, min_calls: int) -> SignalProto:
-        """Get signal that stores the return address for the current call depth and worker."""
+        """Get signal that stores the return address for the current worker.
 
-        return_addresses = self.return_addresses
-        call_depth = self.call_depth
+        Expands the signal if needed, to fit the minimum number of calls.
+        """
+        min_width = max(1, ceil(log2(min_calls)))
 
-        if call_depth not in return_addresses:
-            # Create new level of return addresses
-            name = self.current_worker.create_scoped_name(f'return_address_lvl{call_depth}')
-            return_address = self.engine.define_local(name, width=Var(1), reset_value=0)
+        if self.current_worker not in self.return_addresses:
+            # Create new return address
+            name = self.current_worker.create_scoped_name('RETURN_ADDRESS')
+            return_address = self.engine.define_local(name, width=Var(min_width), reset_value=0)
 
-            return_addresses[call_depth] = return_address
+            self.return_addresses[self.current_worker] = return_address
         else:
             # Get signal that stores the return address
-            return_address = return_addresses[call_depth]
+            return_address = self.return_addresses[self.current_worker]
 
             # Resize it to support the number of calls for this level, if necessary
             width: Var = return_address.width  # type: ignore[assignment]
-            if width < (min_width := ceil(log2(min_calls + 1))):
+            if width.value < min_width:
                 width.update(min_width)
         return return_address
 
@@ -654,7 +642,8 @@ class SegmentImplementation[T: Union[EngineProto, HelperProto], **P, R: Optional
 
         # Get engine context
         self.engine_context = Segment.get_engine_context(self.engine)
-        self.memory_zone: Optional[MemoryZoneProto] = None
+        self._memory_zone: Optional[MemoryZoneProto] = None
+        self.backup_addresses: Dict[WorkerProto, SignalProto] = {}
         self.rendered_segments: Dict[Tuple[WorkerProto, str], RenderedSegment] = {}
         self._active_key: Optional[Tuple[WorkerProto, str]] = None
 
@@ -696,8 +685,8 @@ class SegmentImplementation[T: Union[EngineProto, HelperProto], **P, R: Optional
                 # Then, call the segment
                 return self.call_segment(*args, **kwargs)
             except Exception as e:
-                print(f'The following exception occured while calling {self.format_call(args, kwargs)} in {self.method.__module__}')
-                raise e
+                e.add_note(f'This exception occured while calling segment {self.format_call(args, kwargs)} in {self.method.__module__}')
+                raise
 
     # Selection of rendered segment
     @contextmanager
@@ -762,18 +751,17 @@ class SegmentImplementation[T: Union[EngineProto, HelperProto], **P, R: Optional
 
         # Enter new memory zone of scratch manager
         # The input slots must be located inside the memory zone
-        with self.create_memory_zone() as memory_view:
+        with self.memory_zone as memory_view:
             # Replace input arguments that need to be copied with "slot" signals
             input_slots, args, kwargs = self.add_input_slots(args, kwargs)
 
             # Create floating state, the transition(s) to it are added by _call_segment
             start_state = self.engine.current_state = self.engine.next_state
 
-            # Call the decorated method to render it into the segment and check if the result is safe
-            self.engine_context.call_depth += 1
+            # Call the decorated method to render it into the segment
             result = self.method(*args, **kwargs)
-            self.engine_context.call_depth -= 1
 
+        # Prepare output slots and check if the result is safe
         output_slot_widths = self.prepare_output_slots(args, kwargs, result)
 
         # Save the rendered segment
@@ -797,16 +785,20 @@ class SegmentImplementation[T: Union[EngineProto, HelperProto], **P, R: Optional
 
         rendered_segment = self.active_rendered_segment
 
-        # Generate new call ID
+        # Generate new call ID and save it to return address
+        # Call IDs are unique for each rendered segment, regardless of the call depth
         call_id = len(rendered_segment.calls)
         return_address = self.engine_context.get_return_address(min_calls=call_id + 1)
+        self.push_return_address(return_address, call_id)
 
         # Copy the selected inputs into the input slots of the segment
         self.copy_inputs_in(args, kwargs)
 
-        # Save return address and add transition to segment
-        # Instead of saving an actual address, an ID is used
-        self.engine.set(return_address, call_id)
+        # Create output slots
+        # The slot signals must be defined outside of the memory zone for the segment
+        output_slots = self.create_output_slots(rendered_segment.output_slot_widths)
+
+        # Add transition to segment
         self.engine.jump_if(Const(1), rendered_segment.start_state)
 
         # Expire all previous results
@@ -819,16 +811,54 @@ class SegmentImplementation[T: Union[EngineProto, HelperProto], **P, R: Optional
         # Add new transition from end state for this call to return state (or the copy-out state)
         self.engine.current_state = rendered_segment.end_state
         self.engine.jump_if(return_address == call_id, self.engine.next_state)
-        self.engine.current_state = self.engine.next_state
 
         # Copy the selected results out of the segment and write-protect signals that are not copied
-        result, weak_references = self.copy_result_out(rendered_segment.result, rendered_segment.output_slot_widths)  # type: ignore[arg-type]
+        # This will insert a sync if necessary
+        result, weak_references = self.copy_result_out(rendered_segment.result, output_slots, return_address, call_id)  # type: ignore[arg-type]
+
+        # Restore old return address
+        self.engine.set(return_address, self.backup_address)
 
         # Switch to return state and save the calls start and return state (for debugging)
         return_state = self.engine.current_state
         rendered_segment.calls.append((call_state, return_state, weak_references))
 
         return result
+
+    # Return address
+    def push_return_address(self, return_address: SignalProto, call_id: int) -> None:
+        """Push new call ID to return address while backing up the previous return address.
+
+        If two calls are chained directly after each other, the assignments to the return address is changed.
+        """
+        # Find if the return address is already assigned in the current state
+        # This happens, if two segment calls start directly after each other
+        for assignment in self.engine.current_state.get_assignments(return_address):
+            if not assignment.unconditional:
+                raise RuntimeError(f'Return address {return_address.name} was used in a conditional assignment, indicating that it was tampered with')
+
+            # If an assignment is found, the value will be replaced with the call ID.
+            # The restored backup address is pushed to the own backup address instead. If it already belongs to the same segment, this is not needed.
+            if assignment.value is not self.backup_address:
+                self.engine.set(self.backup_address, assignment.value)
+            assignment.value = to_renderable(call_id)
+            return
+
+        # If no assignment was found, save the call ID in the return address as usual
+        self.engine.set(return_address, call_id)
+        self.engine.set(self.backup_address, return_address)
+
+    def get_fast_forward_return_address(self, return_address: SignalProto) -> SignalProto:
+        """Get the return address signal for fast-forwarding copy-out."""
+        # Find if the return address is already assigned in the current state
+        # This happens, if two segment calls end directly after each other
+        for assignment in self.engine.current_state.get_assignments(return_address):
+            if not assignment.unconditional:
+                raise RuntimeError(f'Return address {return_address.name} was used in a conditional assignment, indicating that it was tampered with')
+
+            return assignment.value  # type: ignore[return-value]
+        # If no assignment was found, use the return address directly
+        return return_address
 
     # Input and output slots
     def add_input_slots[A: Sequence[object], B: Mapping[str, object]](self, args: A, kwargs: B) -> Tuple[Mapping[str, ScratchSignalProto], A, B]:
@@ -864,21 +894,37 @@ class SegmentImplementation[T: Union[EngineProto, HelperProto], **P, R: Optional
 
     def copy_inputs_in[A: Sequence[object], B: Mapping[str, object]](self, args: A, kwargs: B) -> None:
         """Copy signals into the segment."""
-        # FIXME copy-in does not add any safety sync()
-        # If any assignment to an input in done in the call state, the assignment would be rebound.y
 
-        # Recover memory view to re-enable access to the input slots
+        # Process the input values to check if they have been assigned in the current state
+        # If possible, fast-forwards the values
+        fast_forwarder = FastForwarder(self.engine)
+        inputs: Dict[ScratchSignalProto, Renderable] = {}
+        fast_forward_inputs: Dict[ScratchSignalProto, Renderable] = {}
+        for name, input_value in self.iter_bound_arguments(args=args, kwargs=kwargs):
+            if (input_slot := self.active_rendered_segment.input_slots.get(name, None)) is not None:
+                # Attempt to convert value into renderable and check its width
+                input_value = to_renderable(input_value)  # type: ignore[call-overload]
+                if input_value.operand_width is not None and input_value.operand_width > (input_slot_width := input_slot.operand_width):
+                    raise ValueError(
+                        f'Width of input value {input_value} for argument {name} exceeds width of the input slot with '
+                        f'{input_value.operand_width} vs. {input_slot_width} Bit.'
+                    )
+                inputs[input_slot] = input_value
+
+                # Attempt to fast forward the value
+                if (fast_forward_value := fast_forwarder(input_value)) is not None:
+                    fast_forward_inputs[input_slot] = fast_forward_value
+
+        # Add sync if needed
+        if fast_forwarder.needs_sync:
+            self.engine.sync()
+            fast_forward_inputs = {}  # Discard all fast-forward inputs, if a sync is needed anyways
+
+        # Recover memory view to re-enable access to the input slots and assign the input values
         with self.recover_memory_zone():
-            for name, input_value in self.iter_bound_arguments(args=args, kwargs=kwargs):
-                if (input_slot := self.active_rendered_segment.input_slots.get(name, None)) is not None:
-                    input_slot.reclaim()
-                    # Attempt to convert value into renderable and assign it to the slot
-                    input_value = to_renderable(input_value)  # type: ignore[call-overload]
-                    if input_value.operand_width is not None and input_value.operand_width > (input_slot_width := input_slot.operand_width):
-                        raise ValueError(
-                            f'Width of input value {input_value} for argument {name} exceeds width of the input slot with {input_value.operand_width} vs. {input_slot_width} Bit.'
-                        )
-                    self.engine.set(input_slot, input_value)
+            for input_slot, input_value in inputs.items():
+                input_slot.reclaim()
+                self.engine.set(input_slot, fast_forward_inputs.get(input_slot, input_value))
 
     def prepare_output_slots[A: Sequence[object], B: Mapping[str, object]](self, args: A, kwargs: B, result: R) -> Sequence[Optional[int]]:
         """Prepare slot signals for output signals that need to be copied and return widths of the slots."""
@@ -938,17 +984,15 @@ class SegmentImplementation[T: Union[EngineProto, HelperProto], **P, R: Optional
                 output_slots.append(None)
         return output_slots
 
-    def copy_result_out(self, result: R, widths: Sequence[Optional[int]]) -> Tuple[R, Sequence[WeakReference[SignalProto]]]:
+    def copy_result_out(  # noqa: C901
+        self, result: R, output_slots: Sequence[Optional[ScratchSignalProto]], return_address: SignalProto, call_id: int
+    ) -> Tuple[R, Sequence[WeakReference[SignalProto]]]:
         """Copy any scratch signals in the results out of the segment body.
 
         This ensures that the scratch signals can be released like normal.
         """
-
-        # TODO: Perform copy out from end state, not result state
-        # This requires optional assignments and a check, if any assignment was done in the end state of the segmentl.
-        # In this case, the assignment would need to be rebound.
-
         if result is None:
+            self.engine.current_state = self.engine.next_state
             return result, ()
 
         # Pack results into iterable
@@ -957,51 +1001,67 @@ class SegmentImplementation[T: Union[EngineProto, HelperProto], **P, R: Optional
         else:
             results = (result,)  # type: ignore
 
-        # Create output slots
-        # The slot signals must be defined outside of the memory zone for the segment
-        output_slots = self.create_output_slots(widths)
+        # Process the output values for output slots to check if they have been assigned in the current state
+        # If possible, fast-forwards the values
+        fast_forwarder = FastForwarder(self.engine)
+        fast_forward_results: List[Optional[AnySignal]] = []
+        for signal, output_slot in zip(results, output_slots):
+            # Fast-forwarding is only needed for output slots, not signals that are directly returned
+            if output_slot is not None:
+                fast_forward_results.append(fast_forwarder(signal))
+            else:
+                fast_forward_results.append(None)
 
-        # Copy results
-        needs_sync = False
-        new_result: List[object] = []
+        # If fast-forwarding is impossible, everything needs to happen in an intermediary state
+        if fast_forwarder.needs_sync:
+            self.engine.current_state = self.engine.next_state
+            fast_forward_results = [None] * len(fast_forward_results)  # Discard all fast-forward results, if a sync is needed anyways
+        else:
+            fast_forward_condition = self.get_fast_forward_return_address(return_address) == call_id
+
+        new_results: List[object] = []
         weak_references: List[WeakReference[SignalProto]] = []
-
         # Recover memory view to re-enable access to the results
         with self.recover_memory_zone():
-            for signal, output_slot in zip(results, output_slots):
+            for signal, fast_forward_signal, output_slot in zip(results, fast_forward_results, output_slots):
                 if output_slot is not None:
-                    # Reclaim outputs
-                    if isinstance(signal, ScratchSignal):
-                        signal.reclaim()
+                    if fast_forward_signal is not None:
+                        # Reclaim all parts of an fast-forwarded expression and add or update selector assignment
+                        fast_forwarder.reclaim(fast_forward_signal)
+                        fast_forwarder.add_assignment_case(output_slot, fast_forward_signal, fast_forward_condition)
+                    else:
+                        # Reclaim the output signal
+                        if isinstance(signal, ScratchSignal) and signal.released:
+                            signal.reclaim()
+                        self.engine.set(output_slot, signal)
 
-                    self.engine.set(output_slot, signal)
-
-                    needs_sync = True
-                    new_result.append(output_slot)
+                    new_results.append(output_slot)
                 else:
                     ref: WeakReference[PermanentSignal] = WeakReference(signal)  # type: ignore[arg-type]
                     weak_references.append(ref)
-                    new_result.append(ref)
+                    new_results.append(ref)
 
-        # Insert sync state
-        if needs_sync:
+        if fast_forwarder.needs_sync:
             self.engine.sync()
+        else:
+            self.engine.current_state = self.engine.next_state
 
         # Unpack results from iterable
         if is_iterable:
-            return tuple(new_result), weak_references  # type: ignore[arg-type, return-value]
+            return tuple(new_results), weak_references  # type: ignore[arg-type, return-value]
         else:
-            return new_result[0], weak_references  # type: ignore[return-value]
+            return new_results[0], weak_references  # type: ignore[return-value]
 
     # Memory zone management
-    def create_memory_zone(self) -> MemoryZoneProto:
-        """Create memory zone within scratch manager.
+    @property
+    def memory_zone(self) -> MemoryZoneProto:
+        """Memory zone within scratch manager.
 
         The zone is re-used among all calls to this segment.
         """
-        if self.memory_zone is None:
-            self.memory_zone = self.engine.scratch_manager.create_zone(self.method.__name__)
-        return self.memory_zone
+        if self._memory_zone is None:
+            self._memory_zone = self.engine.scratch_manager.create_zone(self.method.__name__)
+        return self._memory_zone
 
     @contextmanager
     def recover_memory_zone(self) -> Iterator[None]:
@@ -1010,6 +1070,20 @@ class SegmentImplementation[T: Union[EngineProto, HelperProto], **P, R: Optional
         zone = view.zone
         with zone.recover(view):
             yield
+
+    # Return adress storage
+    @property
+    def backup_address(self) -> SignalProto:
+        """Signal to backup previous return address during calls, for the current worker."""
+        if self.engine.current_worker not in self.backup_addresses:
+            # Create new backup signal
+            # The name is unique for the worker and the memory zone ID (which is unique across segments)
+            # The width is tied to the variable width of the return address (which is unique accross workers)
+            name = self.engine.current_worker.create_scoped_name(f'BACKUP_ADDRESS_ZONE{self.memory_zone.id}')
+            self.backup_addresses[self.engine.current_worker] = self.engine.define_local(
+                name, width=self.engine_context.return_address.width, reset_value=0
+            )
+        return self.backup_addresses[self.engine.current_worker]
 
     # Signature binding
     def extract_signature(self, *args: P.args, **kwargs: P.kwargs) -> str:

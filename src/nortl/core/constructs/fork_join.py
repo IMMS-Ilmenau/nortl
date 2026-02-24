@@ -108,6 +108,8 @@ class Fork:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
+        if exc_type is not None:
+            return
         # Finalize fork body
         self.engine.sync()
         self.assigned_thread.finish()

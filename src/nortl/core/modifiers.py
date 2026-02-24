@@ -1,5 +1,6 @@
 """Modifiers can be applied to Renderables."""
 
+from abc import abstractmethod
 from contextlib import ExitStack
 from typing import Generic, Literal, Never, Optional, Self, Set, TypeVar, Union
 
@@ -43,6 +44,10 @@ class BaseModifier(Generic[T_Content], OperationTrait, ExitStack):
     def content(self) -> T_Content:
         """Content of the alias."""
         return self._content
+
+    @abstractmethod
+    def copy(self, content: T_Content) -> Self:
+        """Copy modifier to new content."""
 
     # Implement OperationTrait
     @property
@@ -97,6 +102,10 @@ class UnregisteredRead(Generic[T_Content], BaseModifier[T_Content]):
         It must not be used in production code!
     """
 
+    def copy(self, content: T_Content) -> 'UnregisteredRead[T_Content]':
+        """Copy modifier to new content."""
+        return UnregisteredRead(content)
+
     def read_access(self, ignore: Set[ACCESS_CHECKS] = set()) -> None:
         """Register read access from the current thread, state and construct depth.
 
@@ -138,6 +147,10 @@ class Volatile(Generic[T_Signal], BaseModifier[T_Signal]):
         """Set of ignored access checks."""
         return self._ignore
 
+    def copy(self, content: T_Signal) -> 'Volatile[T_Signal]':
+        """Copy modifier to new content."""
+        return Volatile(content, *self.ignore)
+
     # Implement OperationTrait
     def read_access(self, ignore: Set[ACCESS_CHECKS] = set()) -> None:
         """Register read access from the current thread, state and construct depth."""
@@ -168,6 +181,10 @@ class ReadOnly(Generic[T_Signal], BaseModifier[T_Signal]):
 
     Writing to a noRTL signal that is wrapped in a ReadOnly modifier will throw an Access Violation.
     """
+
+    def copy(self, content: T_Signal) -> 'ReadOnly[T_Signal]':
+        """Copy modifier to new content."""
+        return ReadOnly(content)
 
     # Implement OperationTrait
     def read_access(self, ignore: Set[ACCESS_CHECKS] = set()) -> None:
@@ -209,6 +226,10 @@ class WeakReference(Generic[T_PermanentSignal], BaseModifier[T_PermanentSignal])
     def __init__(self, content: T_PermanentSignal):
         super().__init__(content)
         self._expired = False
+
+    def copy(self, content: T_PermanentSignal) -> 'WeakReference[T_PermanentSignal]':
+        """Copy modifier to new content."""
+        return WeakReference(self.content)
 
     @property
     def expired(self) -> bool:

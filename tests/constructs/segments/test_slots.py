@@ -41,6 +41,7 @@ def test_copy(execute_test: TestExecutor) -> None:
     _ = engine.define_input('IN')
     output = engine.define_output('OUT', 8, reset_value=0)
     engine.sync()
+    assert len(engine.states['main']) == 2
 
     for i in range(4):
         engine.current_state.name = f'call_state{i}'
@@ -48,14 +49,9 @@ def test_copy(execute_test: TestExecutor) -> None:
         engine.current_state.name = f'return_state{i}'
         engine.set(output, output_plus_one)
 
-        # This sync() plays an important role: it copies output_plus_one to output, before calling the segment again
-        # Currently, the segment doesn't insert a safety sync() itself
-        # FIXME remove once segments have a safety sync() or intelligent copy
-        engine.sync()
-
-        # Each call takes 3 states (call, copy-out, return)
-        # The first call takes two more states
-        assert len(engine.states['main']) == 7 + 3 * i
+        # Each call takes 1 state (return/call), because return and call overlap
+        # The first call takes two more states (start and end state inside the segment)
+        assert len(engine.states['main']) == 5 + i
 
     # Execute test
     result = execute_test(engine)

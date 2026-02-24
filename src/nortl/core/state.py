@@ -32,6 +32,9 @@ class Assignment(BaseAssignment):
         super().__init__(signal)
         self.value = value
 
+    def __format__(self, format_spec: str) -> str:
+        return f'{self.signal} = {self.value}'
+
 
 class _ConditionalAssignmentMixin(metaclass=ABCMeta):
     @property
@@ -76,6 +79,9 @@ class ConditionalAssignment(_ConditionalAssignmentMixin, BaseAssignment):
     @property
     def cases(self) -> Tuple[Tuple[Renderable, Renderable]]:
         return ((self.condition, self.value),)
+
+    def __format__(self, format_spec: str) -> str:
+        return f'{self.signal} = {self.value} if {self.condition}'
 
 
 class SelectorAssignment(_ConditionalAssignmentMixin, BaseAssignment):
@@ -125,6 +131,9 @@ class SelectorAssignment(_ConditionalAssignmentMixin, BaseAssignment):
     def default(self) -> Optional[Union[Renderable, 'SelectorAssignment']]:
         """Default value, if no condition is met."""
         return self._default
+
+    def __format__(self, format_spec: str) -> str:
+        return f'{self.signal} = {self.selector}'
 
     def _update_cases(self) -> None:  # noqa: C901
         """Compute cases, default and priority."""
@@ -309,18 +318,21 @@ class State(NamedEntity):
         return self._assignments
 
     def add_assignment(self, signal: AssignmentTarget, value: Renderable, condition: Optional[Renderable] = None) -> None:
-        """Add assignment to this state."""
+        """Add assignment to this state.
+
+        !!! warning
+            Conditional assignments bypass the multi-assignment check for overlap with other conditional assignments!
+        """
         if not self.allow_assignments:
             raise ForbiddenAssignmentError(f'State {self.name} does not allow assignments.')
 
         # Check if signal is already assigned
         for assignment in self.get_assignments(signal):
             # Ignore conditional assignments
-            # FIXME Danger: Conditional assignments fully bypass the multi-assignment check!
-            if isinstance(assignment, ConditionalAssignment) and (assignment.condition == 1).render() != "1'h1":
+            if isinstance(assignment, ConditionalAssignment) and condition is not None:
                 continue
 
-            # Regular assignment, test overlap
+            # Test overlap
             overlap = signal.overlaps_with(assignment.signal)
 
             if overlap == 'partial':
@@ -353,18 +365,24 @@ class State(NamedEntity):
         self._assigned_signal_names.add(signal.name)
 
     def add_selector_assignment(self, signal: AssignmentTarget, selector: RenderableSelector, allow_short_circuit: bool = False) -> None:
-        """Add selector assignment to this state."""
+        """Add selector assignment to this state.
+
+        !!! warning
+            Selector assignments bypass the multi-assignment check for partial overlaps!
+        """
         if not self.allow_assignments:
             raise ForbiddenAssignmentError(f'State {self.name} does not allow assignments.')
 
         # Check if signal is already assigned
         for assignment in self.get_assignments(signal):
-            # Regular assignment, test overlap
             overlap = signal.overlaps_with(assignment.signal)
-
-            if overlap is not False:
+            if overlap is True:
                 raise ConflictingAssignmentError(
                     f'State {self.name} already has an assignment to signal {signal.name}.\nIt is not possible to add a selector assignment.'
+                )
+            elif overlap == 'partial' and assignment.unconditional:
+                raise ConflictingAssignmentError(
+                    f'State {self.name} already has an unconditional assignment to signal {signal.name}.\nIt is not possible to add a selector assignment.'
                 )
 
         # Save new assignment

@@ -272,6 +272,8 @@ class MemoryZone:
         return view
 
     def __exit__(self, exc_type: Optional[Type[BaseException]], exc_val: Optional[BaseException], exc_tb: Optional[TracebackType]) -> None:
+        if exc_type is not None:
+            return
         if not self.active:
             raise RuntimeError('This zone is not active, unable to deactivate it.')
 

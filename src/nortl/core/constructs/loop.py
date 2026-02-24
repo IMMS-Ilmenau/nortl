@@ -79,6 +79,8 @@ class ForLoop:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
+        if exc_type is not None:
+            return
         self.engine.sync()
         self.engine.set(self.counter, self.counter_nxt)
         self.engine.jump_if(Const(1), self.start_state)
@@ -143,6 +145,8 @@ class WhileLoop:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
+        if exc_type is not None:
+            return
         if len(self.engine.current_state.transitions) > 0:
             raise RuntimeError('Last state in a While loop must not have any outgoing transitions!')
 

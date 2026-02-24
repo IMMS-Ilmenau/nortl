@@ -789,6 +789,8 @@ class ScratchSignal(_BaseSlice, _AccessControlledSignal):
         return self
 
     def __exit__(self, exc_type: Optional[Type[BaseException]], exc_val: Optional[BaseException], exc_tb: Optional[TracebackType]) -> None:
+        if exc_type is not None:
+            return
         self.release()
 
     def enter_context(self) -> None:

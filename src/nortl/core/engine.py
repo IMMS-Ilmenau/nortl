@@ -360,6 +360,7 @@ class CoreEngine:
         Raises:
             TypeError: If the signal is not a noRTL signal.
             OwnershipError: If the signal does not belong to this noRTL engine.
+            ConflictingAssignmentError: If the assignment overlaps with another assignment.
         """
         if not hasattr(signal, 'write_access'):
             raise TypeError(f'{signal} is not a valid assignment target.')
@@ -393,6 +394,12 @@ class CoreEngine:
                 always True, the other conditions would be unreachable. This is a violation of the rules of `unique if`.
                 If `allow_short_circuit` is True, noRTL will remove all other conditions, and only keep the always-True condition.
                 If it is False , noRTL will raise an exception to avoid downstream issues in the Verilog code.
+
+        !!! warning
+            Selector assignments bypass the check for conflicting assignments, if there is a partial overlap between two unconditional assignment!
+
+            This means, if two overlapping slices of the same signals have conditional assignments, no [ConflictingAssignmentError][nortl.core.exceptions.ConflictingAssignmentError] is raised.
+
 
         Example:
             The following example defines a 2x2 Input AND into 2-Input OR gate.
@@ -432,6 +439,7 @@ class CoreEngine:
         Raises:
             TypeError: If the signal is not a noRTL signal.
             OwnershipError: If the signal does not belong to this noRTL engine.
+            ConflictingAssignmentError: If the selector assignment fully overlaps with another assignment or if it partially overlaps with an unconditional assignment.
         """
         if not hasattr(signal, 'write_access'):
             raise TypeError(f'{signal} is not a valid assignment target.')

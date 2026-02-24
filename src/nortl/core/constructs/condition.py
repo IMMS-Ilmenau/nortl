@@ -87,6 +87,8 @@ class Condition:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
+        if exc_type is not None:
+            return
         jumpconds = [t[0] for t in self.engine.current_state.transitions]
         if Const(1) not in jumpconds:
             self.engine.jump_if(Const(1, 1), self.final_state)
@@ -143,5 +145,7 @@ class ElseCondition(Condition):
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
+        if exc_type is not None:
+            return
         super().__exit__(exc_type, exc_val, exc_tb)
         self.engine.sync()
