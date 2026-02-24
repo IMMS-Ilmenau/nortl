@@ -325,8 +325,9 @@ class SegmentFactoryMixin:
 
         Arguments:
             input_validator: A validator callback, that accepts all arguments and keyword arguments of the decorated function or method.
-                It doesn't require the self attribute. The validator callback may either return a boolean result, where True means that all arguments
-                passed validation. Or it may directly raise an exception.
+                The first argument (engine or self) must be omitted.
+                The validator callback may either return a boolean result, where True means that all arguments passed validation.
+                Or it may directly raise an exception.
                 As the validator callback receives all arguments at the same time, it can be used for "global" checks.
             input_checks: Keywords mapping the argument names of the decorated function or method to individual validators, e.g. created by lambda
                 functions.
