@@ -689,11 +689,12 @@ wheels = [
 
 [[package]]
 name = "nortl"
-version = "1.5.3"
+version = "1.5.4"
 source = { editable = "." }
 dependencies = [
     { name = "more-itertools" },
     { name = "networkx" },
+    { name = "typing-extensions" },
 ]
 
 [package.optional-dependencies]
@@ -733,6 +734,7 @@ requires-dist = [
     { name = "pyinstrument", marker = "extra == 'profiler'", specifier = ">=5.1.2" },
     { name = "pytest-stub", marker = "extra == 'type-stubs'" },
     { name = "types-networkx", marker = "extra == 'type-stubs'" },
+    { name = "typing-extensions", specifier = ">=4.15.0" },
 ]
 provides-extras = ["type-stubs", "profiler"]
 
