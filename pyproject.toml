@@ -1,6 +1,6 @@
 [project]
 name = "nortl"
-version = "1.5.4"
+version = "1.5.5"
 description = "Not-only RTL."
 readme = "README.md"
 requires-python = ">=3.12"

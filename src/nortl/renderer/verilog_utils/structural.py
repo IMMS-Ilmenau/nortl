@@ -249,9 +249,7 @@ class VerilogDeclaration:
 
         content.append(name_str)
 
-        if not any(t in self.verilog_type for t in ['wire', 'logic', 'reg']) and not self.verilog_type.startswith(
-            'enum'
-        ):  # other net types are out of scope for now
+        if self.verilog_type not in ('wire', 'logic', 'reg') and not self.verilog_type.startswith('enum'):  # other net types are out of scope for now
             content.append(f'({", ".join(connection_lst)})')
 
         return ' '.join(content)
