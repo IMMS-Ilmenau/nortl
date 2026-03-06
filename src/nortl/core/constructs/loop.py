@@ -83,7 +83,7 @@ class ForLoop:
             return
         self.engine.sync()
         self.engine.set(self.counter, self.counter_nxt)
-        self.engine.jump_if(Const(1), self.start_state)
+        self.engine.jump_if(Const(True), self.start_state)
 
         # Goto final state
         self.engine.current_state = self.final_state
@@ -150,7 +150,7 @@ class WhileLoop:
         if len(self.engine.current_state.transitions) > 0:
             raise RuntimeError('Last state in a While loop must not have any outgoing transitions!')
 
-        self.engine.jump_if(Const(1), self.start_state)
+        self.engine.jump_if(Const(True), self.start_state)
 
         # Goto final state
         self.engine.current_state = self.final_state

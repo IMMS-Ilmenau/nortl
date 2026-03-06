@@ -419,6 +419,9 @@ class State(NamedEntity):
             raise TransitionRestrictionError(
                 f'This state was restricted to transitions to state {self._restricted_state.name}. Unable to add other transitions.'
             )
+        elif self.worker is not state.worker:
+            raise RuntimeError('Tried to create a transition to a state outside of the current worker. This is not allowed!')
+
         if condition.render() != "1'h0":
             self._transitions.append((condition, state))  # type: ignore[arg-type]
 

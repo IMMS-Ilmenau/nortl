@@ -26,6 +26,10 @@ class ScratchManager:
     # Scratch signal management
     def create_signal(self, width: int) -> ScratchSignal:
         """Create new scratch signal inside the active memory zone."""
+
+        if width <= 0:
+            raise RuntimeError('Tried to create a scratch signal with width<=0. Something is wrong in the code outside of this unit!')
+
         return self.active_zone.create_signal(width)
 
     # Context management

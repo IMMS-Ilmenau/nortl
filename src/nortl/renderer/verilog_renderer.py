@@ -199,8 +199,6 @@ class VerilogRenderer:
 
         for name, worker in self.engine.workers.items():
             self.state_regs[name] = create_state_var(worker, self.encoding)
-            for state in worker.states:
-                self.state_regs[name].add_state(state.name)
 
         for state_reg in self.state_regs.values():
             self.verilog_module.signals.append(state_reg.declare())
@@ -242,18 +240,11 @@ class VerilogRenderer:
         for worker in self.engine.workers.values():
             self.state_regs[worker.name].new_case('current state')
 
-            next_state_func.add(self.state_regs[worker.name].state_transition(None))
+            next_state_func.add(self.state_regs[worker.name].default_state_assignment())
 
             for state in worker.states:
                 for condition, next_state in state.transitions:
-                    if condition.render() == "1'h1":
-                        self.state_regs[worker.name].add_case(state.name, self.state_regs[worker.name].state_transition(next_state.name))
-                    elif condition.render() == "1'h0":
-                        pass
-                    else:
-                        item = VerilogIf(condition)
-                        item.true_branch.add(self.state_regs[worker.name].state_transition(next_state.name))
-                        self.state_regs[worker.name].add_case(state.name, item)
+                    self.state_regs[worker.name].state_transition(state.name, next_state.name, condition)
 
             next_state_func.add(self.state_regs[worker.name].build_case())
 

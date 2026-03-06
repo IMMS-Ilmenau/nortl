@@ -49,6 +49,7 @@ class Worker(NamedEntity):
         self._threads: List['Thread'] = []  # Threads mapped to this worker
 
         # Create reset state and set to current state
+        self._state_ctr = 0
         self._reset_state = self.create_state(reset_state_name, allow_assignments=self.is_main_worker)
         self._current_state = self.reset_state
         self._next_state: Optional[State] = None
@@ -200,7 +201,8 @@ class Worker(NamedEntity):
         """
         # Generate default state name
         if name is None:
-            name = f'STATE_{len(self.states)}'
+            name = f'STATE_{self._state_ctr}'
+        self._state_ctr += 1
 
         if len(self.states) > 0 and len(self.threads) == 0:
             raise RuntimeError('Worker has no thread, unable to create new states.')
@@ -445,7 +447,7 @@ class Thread(NamedEntity):
 
     def finish(self) -> None:
         """Finishes a Thread."""
-        self.engine.jump_if(Const(1), self.worker.reset_state)
+        self.engine.jump_if(Const(True), self.worker.reset_state)
         self.engine.set(self.worker.idle, 1)
 
     @property

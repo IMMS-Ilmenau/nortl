@@ -97,6 +97,7 @@ class VerilogBlock:
         Returns:
             The Verilog block string.
         """
+
         content: List[str] = ['begin']
         content.append(self.render_items())
         content.append('end')

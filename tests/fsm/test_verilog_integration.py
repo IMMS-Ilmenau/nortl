@@ -469,7 +469,7 @@ def test_multiple_workers(encoding: ENCODINGS) -> None:
         engine.wait_for(adr_incr)
         engine.set(address_counter, address_counter_nxt)
         engine.set(end_of_addresses, address_counter_nxt == N_ADDRESSES - 1)
-        engine.jump_if(Const(1), engine.reset_state)
+        engine.jump_if(Const(True), engine.reset_state)
 
         return address_counter
 

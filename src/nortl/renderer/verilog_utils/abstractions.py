@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
 from math import ceil, log2
-from typing import List, Literal, Optional
+from typing import List, Literal
 
-from nortl.core.protocols import WorkerProto
+from nortl.core.protocols import Renderable, WorkerProto
 
-from .process import AlwaysFF, VerilogAssignment, VerilogCase, VerilogIf
+from .process import AlwaysFF, VerilogAssignment, VerilogBlock, VerilogCase, VerilogIf
 from .structural import VerilogDeclaration
 from .utils import VerilogRenderable
 
@@ -100,8 +100,12 @@ class StateRegisterBase(ABC):
         pass
 
     @abstractmethod
-    def state_transition(self, next_state: Optional[str]) -> VerilogAssignment:
-        """Realzies a transition to a next state."""
+    def state_transition(self, state: str, next_state: str, condition: Renderable) -> None:
+        """Realizes a transition to a next state."""
+
+    @abstractmethod
+    def default_state_assignment(self) -> VerilogBlock:
+        """Creates an the default assignment to the next-state variable(s)."""
 
 
 class StateRegister(StateRegisterBase):
@@ -118,6 +122,9 @@ class StateRegister(StateRegisterBase):
             worker: The worker containing the states.
         """
         super().__init__(worker)
+
+        for state in self.worker.states:
+            self.add_state(state.name)
 
     def declare(self) -> VerilogDeclaration:
         """Declares the state register (enum) in the Verilog module.
@@ -190,14 +197,24 @@ class StateRegister(StateRegisterBase):
         """Encodes the state in the currently realized way."""
         return state_name
 
-    def state_transition(self, next_state: Optional[str]) -> VerilogAssignment:
-        if next_state is None:
-            return VerilogAssignment(self.next_state_var, self.state_var)
-        return VerilogAssignment(self.next_state_var, next_state)
+    def default_state_assignment(self) -> VerilogBlock:
+        block = VerilogBlock()
+        block.add(VerilogAssignment(self.next_state_var, self.state_var))
+        return block
+
+    def state_transition(self, state: str, next_state: str, condition: Renderable) -> None:
+        if condition.render() == "1'h1":
+            self.add_case(state, VerilogAssignment(self.next_state_var, next_state))
+        elif condition.render() == "1'h0":
+            pass
+        else:
+            item = VerilogIf(condition.render())
+            item.true_branch.add(VerilogAssignment(self.next_state_var, next_state))
+            self.add_case(state, item)
 
 
 class OneHotEncodedStateRegister(StateRegisterBase):
-    """Handles state register declaration and case statement assembly for Verilog generation     using one-hot encoding.
+    """Handles state register declaration and case statement assembly for Verilog generation using one-hot encoding.
 
     This class isolates state encoding logic, allowing for easy experimentation with
     different state encodings without modifying the renderer's core logic. Unlike the
@@ -221,6 +238,9 @@ class OneHotEncodedStateRegister(StateRegisterBase):
         """
         super().__init__(worker)
         self.state_width = len(self.worker.states)
+
+        for state in self.worker.states:
+            self.add_state(state.name)
 
     def declare(self) -> VerilogDeclaration:
         """Declares the state register (one-hot encoded logic) in the Verilog module.
@@ -332,10 +352,20 @@ class OneHotEncodedStateRegister(StateRegisterBase):
 
         return f"{len(self.states)}'b{''.join(state_encoded)}"
 
-    def state_transition(self, next_state: Optional[str]) -> VerilogAssignment:
-        if next_state is None:
-            return VerilogAssignment(self.next_state_var, self.state_var)
-        return VerilogAssignment(self.next_state_var, self.encode(next_state))
+    def default_state_assignment(self) -> VerilogBlock:
+        block = VerilogBlock()
+        block.add(VerilogAssignment(self.next_state_var, self.state_var))
+        return block
+
+    def state_transition(self, state: str, next_state: str, condition: Renderable) -> None:
+        if condition.render() == "1'h1":
+            self.add_case(state, VerilogAssignment(self.next_state_var, self.encode(next_state)))
+        elif condition.render() == "1'h0":
+            pass
+        else:
+            item = VerilogIf(condition.render())
+            item.true_branch.add(VerilogAssignment(self.next_state_var, self.encode(next_state)))
+            self.add_case(state, item)
 
 
 class MultiHotEncodedStateRegister(StateRegisterBase):
@@ -379,6 +409,9 @@ class MultiHotEncodedStateRegister(StateRegisterBase):
         self.num_packets = ceil(bits_needed / packet_size)
         # Total width = num_packets * packet_size
         self.state_width = self.num_packets * (2**packet_size)
+
+        for state in self.worker.states:
+            self.add_state(state.name)
 
     def declare(self) -> VerilogDeclaration:
         """Declares the state register (multi-hot encoded logic) in the Verilog module.
@@ -506,7 +539,17 @@ class MultiHotEncodedStateRegister(StateRegisterBase):
         # Concatenate packets: most significant packet first
         return '{' + ', '.join(reversed(packets)) + '}'
 
-    def state_transition(self, next_state: Optional[str]) -> VerilogAssignment:
-        if next_state is None:
-            return VerilogAssignment(self.next_state_var, self.state_var)
-        return VerilogAssignment(self.next_state_var, self.encode(next_state))
+    def default_state_assignment(self) -> VerilogBlock:
+        block = VerilogBlock()
+        block.add(VerilogAssignment(self.next_state_var, self.state_var))
+        return block
+
+    def state_transition(self, state: str, next_state: str, condition: Renderable) -> None:
+        if condition.render() == "1'h1":
+            self.add_case(state, VerilogAssignment(self.next_state_var, self.encode(next_state)))
+        elif condition.render() == "1'h0":
+            pass
+        else:
+            item = VerilogIf(condition.render())
+            item.true_branch.add(VerilogAssignment(self.next_state_var, self.encode(next_state)))
+            self.add_case(state, item)

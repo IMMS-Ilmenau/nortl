@@ -17,6 +17,7 @@ from typing import (
     Protocol,
     Self,
     Sequence,
+    Set,
     Tuple,
     Union,
     overload,
@@ -63,6 +64,26 @@ class Ignore:
         return '...'
 
 
+def is_call_state(state: StateProto) -> bool:
+    for segment in Segment.get_engine_context(state.engine).segments:
+        for rendered_segment in segment.rendered_segments.values():
+            for call_state, _, _ in rendered_segment.calls:
+                if call_state is state:
+                    return True
+
+    return False
+
+
+def return_state(state: StateProto) -> StateProto:
+    for segment in Segment.get_engine_context(state.engine).segments:
+        for rendered_segment in segment.rendered_segments.values():
+            for call_state, return_state, _ in rendered_segment.calls:
+                if call_state is state:
+                    return return_state
+
+    raise ValueError('given state is not a call state of a segment')
+
+
 class RenderedSegment:
     """Helper class to store information about a rendered Segment for a specific call signature and worker."""
 
@@ -82,6 +103,35 @@ class RenderedSegment:
         self.result: object = result
         self.memory_view = memory_view
         self.calls: List[Tuple[StateProto, StateProto, Sequence[WeakReference[SignalProto]]]] = []
+
+    @property
+    def states(self) -> List[StateProto]:
+        return self._dfs_statesearch(self.start_state, self.end_state, set())
+
+    def _dfs_statesearch(self, start_state: StateProto, end_state: StateProto, visited: Set[str]) -> List[StateProto]:
+        if is_call_state(start_state):
+            start_state = return_state(start_state)
+
+        if start_state.name == end_state.name:
+            if end_state.name in visited:
+                return []
+            else:
+                return [end_state]
+
+        ret = [start_state]
+        visited.add(start_state.name)
+
+        for _, next_state in start_state.transitions:
+            if next_state.name not in visited:
+                if is_call_state(next_state):
+                    ret += self._dfs_statesearch(return_state(next_state), end_state, visited)
+                else:
+                    ret += self._dfs_statesearch(next_state, end_state, visited)
+
+                for ret_state in ret:
+                    visited.add(ret_state.name)
+
+        return ret
 
 
 class EngineContext:
@@ -362,7 +412,7 @@ class SegmentFactoryMixin:
                         engine.jump_if(length == (i + 1), end_state, engine.next_state)  # type: ignore[arg-type]
                         engine.current_state = engine.next_state
                     else:
-                        engine.jump_if(Const(1), end_state)
+                        engine.jump_if(Const(True), end_state)
                 engine.current_state = end_state
             ```
 
@@ -800,7 +850,7 @@ class SegmentImplementation[T: Union[EngineProto, HelperProto], **P, R: Optional
         output_slots = self.create_output_slots(rendered_segment.output_slot_widths)
 
         # Add transition to segment
-        self.engine.jump_if(Const(1), rendered_segment.start_state)
+        self.engine.jump_if(Const(True), rendered_segment.start_state)
 
         # Expire all previous results
         for _, _, weak_references in rendered_segment.calls:
