@@ -5,7 +5,7 @@ from nortl.renderer.verilog_utils.utils import VerilogRenderable
 
 from .verilog_utils import ENCODINGS, create_state_var
 from .verilog_utils.abstractions import MultiHotEncodedStateRegister, OneHotEncodedStateRegister, StateRegister
-from .verilog_utils.process import AlwaysComb, AlwaysFF, VerilogAssignment, VerilogIf, VerilogPrint, VerilogPrintf
+from .verilog_utils.process import AlwaysComb, AlwaysFF, VerilogAssignment, VerilogCase, VerilogIf, VerilogPrint, VerilogPrintf
 from .verilog_utils.structural import VerilogDeclaration, VerilogModule, VerilogPortDeclaration
 
 # FIXME: Make empty blocks being not rendered at all.
@@ -53,6 +53,9 @@ class VerilogRenderer:
         self.codelst = []
         self.verilog_module = VerilogModule(self.engine.module_name)
         self.state_regs = {}
+        self.state_transition_blocks: Dict[str, AlwaysFF] = {}
+        self.output_function_blocks: Dict[str, AlwaysFF] = {}
+        self.print_function_blocks: Dict[str, AlwaysFF] = {}
 
     def render(self) -> str:
         """Renders the engine into Verilog code.
@@ -85,19 +88,33 @@ class VerilogRenderer:
         return '\n'.join(ret)
 
     def create_clock_gates(self) -> None:
-        """Creates the clock gating logic, including gated clock signals and enables.
+        """Creates a three-level clock gating hierarchy.
 
-        This method adds the necessary signals and connections for implementing clock gating,
-        which can reduce power consumption by disabling the clock signal to inactive parts of the engine.
+        Level 1 - Module gate (GCLK): propagates to all lower-level gates and gates sub-module
+        instances. Enabled when any register in the module will change.
+
+        Level 2a - Output gate (GCLK_output): cascaded from GCLK. Gates the shared output and
+        print AlwaysFF blocks. Enabled by XOR gating: asserted when any output register's next
+        value (determined from state_nxt and the state assignments) differs from its current value.
+
+        Level 2b - Per-worker state gates (GCLK_<name>): cascaded from GCLK. One per worker.
+        Gates the state transition AlwaysFF for that worker. Enabled when state_nxt != state.
         """
-        # Create gated clock signals and clock enables
+        # Module-level gate signals
         self.verilog_module.signals.append(VerilogDeclaration('logic', 'GCLK'))
         self.verilog_module.signals.append(VerilogDeclaration('logic', 'GCLK_enable'))
-        self.verilog_module.signals.append(VerilogDeclaration('logic', 'GCLK_enable_latched'))
 
+        # Output register gate signals
+        self.verilog_module.signals.append(VerilogDeclaration('logic', 'GCLK_output'))
+        self.verilog_module.signals.append(VerilogDeclaration('logic', 'GCLK_output_enable'))
+
+        # Per-worker state register gate signals
+        for worker_name in self.engine.workers:
+            self.verilog_module.signals.append(VerilogDeclaration('logic', f'GCLK_{worker_name}'))
+            self.verilog_module.signals.append(VerilogDeclaration('logic', f'GCLK_{worker_name}_enable'))
+
+        # Sub-module clock request signals
         clk_requests: List[str] = []
-
-        # Get clock requests from instances
         for name, instance in self.engine.module_instances.items():
             if instance.module.clk_request_port is not None:
                 signalname = f'clk_request_{name}'
@@ -107,60 +124,111 @@ class VerilogRenderer:
                 verilog_inst = self.verilog_module.get_instance(name)
                 verilog_inst.add_connection('CLK_I', 'GCLK')
 
+        # Output and print blocks use the XOR-gated output clock
+        self.output_function_blocks['_shared'].clk = 'GCLK_output'
+        self.print_function_blocks['_shared'].clk = 'GCLK_output'
+
+        # Per-worker state transition blocks use their own gated clock
+        for worker_name, blk in self.state_transition_blocks.items():
+            blk.clk = f'GCLK_{worker_name}'
+
+        # Create clock enable logic
         self.create_clock_enable(clk_requests)
 
-        # Change Clock signal of Always_ff blocks
-        for blk in self.verilog_module.functionals:
-            if isinstance(blk, AlwaysFF):
-                blk.clk = 'GCLK'
-
-        # Instantiate Clock Gate
+        # Instantiate module-level clock gate
         clock_gate = VerilogDeclaration('nortl_clock_gate', 'I_CLOCK_GATE')
         clock_gate.add_connection('CLK_I', 'CLK_I')
         clock_gate.add_connection('EN', 'GCLK_enable')
         clock_gate.add_connection('GCLK_O', 'GCLK')
-
         self.verilog_module.instances.append(clock_gate)
 
-    def create_clock_enable(self, clk_requests: List[str]) -> None:
-        """Creates the clock enable signal based on state and clock requests.
+        # Instantiate output register clock gate, cascaded from GCLK
+        output_gate = VerilogDeclaration('nortl_clock_gate', 'I_CLOCK_GATE_output')
+        output_gate.add_connection('CLK_I', 'GCLK')
+        output_gate.add_connection('EN', 'GCLK_output_enable')
+        output_gate.add_connection('GCLK_O', 'GCLK_output')
+        self.verilog_module.instances.append(output_gate)
 
-        This method generates the logic for controlling the clock enable signal, which is used to
-        disable the clock signal to inactive parts of the engine, reducing power consumption.
+    def create_clock_enable(self, clk_requests: List[str]) -> None:
+        """Creates all clock enable signals.
+
+        Per-worker enable (GCLK_<name>_enable): asserted when state_nxt != state.
+
+        Output enable (GCLK_output_enable): XOR-based, asserted when any output register's
+        next value (derived from state_nxt and the state assignments) differs from its current value.
+
+        Module-level enable (GCLK_enable): OR of output enable, all per-worker enables, and
+        any sub-module clock requests. Ensures GCLK propagates to all cascaded gates whenever
+        anything needs to clock.
         """
-        # Create clock enable by states
-        clk_en_proc = AlwaysComb()
-        clk_en_proc.add(VerilogAssignment('GCLK_enable', "1'b1"))
+        worker_enables: List[str] = []
+
+        # Per-worker enable: active when state register will change OR when sync reset is asserted
+        for worker_name, state_reg in self.state_regs.items():
+            enable_signal = f'GCLK_{worker_name}_enable'
+            worker_enables.append(enable_signal)
+
+            worker = self.engine.workers[worker_name]
+            enable_expr = f'({state_reg.next_state_var} != {state_reg.state_var})'
+            sync_reset_expr = f'{worker.sync_reset}'
+            if sync_reset_expr != '0':
+                enable_expr = f'{enable_expr} | {sync_reset_expr}'
+
+            cg_proc = AlwaysComb()
+            cg_proc.add(VerilogAssignment(enable_signal, enable_expr))
+            self.verilog_module.functionals.append(cg_proc)
+
+        # Output enable: XOR-based comparison of current output values vs. next values
+        self._create_output_clock_enable()
+
+        # Module-level enable: OR of everything — ensures GCLK reaches all cascaded gates
+        all_enables = ['GCLK_output_enable', *worker_enables, *clk_requests]
+        module_cg_proc = AlwaysComb()
+        module_cg_proc.add(VerilogAssignment('GCLK_enable', ' | '.join(all_enables)))
+        self.verilog_module.functionals.append(module_cg_proc)
+
+    def _create_output_clock_enable(self) -> None:
+        """Builds GCLK_output_enable using XOR-based clock gating.
+
+        For each worker, a case statement on state_nxt checks whether each output register's
+        next value (as determined by the state's assignments) differs from its current value.
+        The enable is asserted if any output will change.
+
+        Pulsing signals are also handled: in states where they are not explicitly assigned they
+        will be reset to 0, so the enable is asserted when the signal is currently non-zero.
+        """
+        pulsing_signals = [s for s in self.engine.signals.values() if s.pulsing]
+
+        output_en_proc = AlwaysComb()
+        output_en_proc.add(VerilogAssignment('GCLK_output_enable', "1'b0"))
 
         for worker in self.engine.workers.values():
-            self.state_regs[worker.name].new_case('next state')
+            state_reg = self.state_regs[worker.name]
+            case = VerilogCase(state_reg.next_state_var)
 
             for state in worker.states:
-                if state.has_metadata('Clock_gating'):  # FIXME: Add Metadata to docs
-                    self.state_regs[worker.name].add_case(state.name, VerilogAssignment('GCLK_enable', "1'b0"))
+                unconditionally_assigned = {a.signal for a in state.assignments if a.unconditional}
 
-                    for condition, _ in state.transitions:
-                        block = VerilogIf(condition)
-                        block.true_branch.add(VerilogAssignment('GCLK_enable', "1'b1"))
-                        self.state_regs[worker.name].add_case(state.name, block)
+                for assignment in state.assignments:
+                    if assignment.unconditional:
+                        # XOR check: enable if current value differs from the value to be assigned
+                        check = VerilogIf(assignment.signal != assignment.value)
+                        check.true_branch.add(VerilogAssignment('GCLK_output_enable', "1'b1"))
+                        case.add_item(state_reg.encode(state.name), check)
+                    else:
+                        # Conservative for conditional assignments: always enable
+                        case.add_item(state_reg.encode(state.name), VerilogAssignment('GCLK_output_enable', "1'b1"))
 
-                    for assignment in state.assignments:
-                        if assignment.unconditional:
-                            block = VerilogIf((assignment.signal != assignment.value))
-                            block.true_branch.add(VerilogAssignment('GCLK_enable', "1'b1"))
-                            self.state_regs[worker.name].add_case(state.name, block)
-                        else:
-                            # FIXME Selectively enable clock for conditional assignments
-                            self.state_regs[worker.name].add_case(state.name, VerilogAssignment('GCLK_enable', "1'b1"))
+                # Pulsing signals not assigned in this state will be reset to 0
+                for ps in pulsing_signals:
+                    if ps not in unconditionally_assigned:
+                        check = VerilogIf(ps != 0)
+                        check.true_branch.add(VerilogAssignment('GCLK_output_enable', "1'b1"))
+                        case.add_item(state_reg.encode(state.name), check)
 
-            clk_en_proc.add(self.state_regs[worker.name].build_case())
+            output_en_proc.add(case)
 
-        for req in clk_requests:
-            block = VerilogIf(req)
-            block.true_branch.add(VerilogAssignment('GCLK_enable', "1'b1"))
-            clk_en_proc.add(block)
-
-        self.verilog_module.functionals.append(clk_en_proc)
+        self.verilog_module.functionals.append(output_en_proc)
 
     def create_interface(self) -> None:
         """Creates the Verilog module interface, including parameters, signals, and ports.
@@ -224,6 +292,10 @@ class VerilogRenderer:
                 decl.add_connection('CLK_I', 'CLK_I')
                 decl.add_connection('RST_ASYNC_I', 'RST_ASYNC_I')
 
+            if self.clock_gating and instance.module.clk_request_port is not None:
+                signalname = f'clk_request_{instance.name}'
+                decl.add_connection(instance.module.clk_request_port, signalname)
+
             for port_name, signal in instance.port_connections.items():
                 decl.add_connection(port_name, signal.render())
 
@@ -255,6 +327,11 @@ class VerilogRenderer:
 
         This method generates the logic for updating the output signals of the engine, based on the
         current state and the input signals.
+
+        All workers share a single AlwaysFF because multiple workers can assign to the same output
+        signal. Splitting into per-worker blocks would create multiple drivers for the same register,
+        which is a Verilog error. When clock gating is enabled, this block is driven by the
+        module-level GCLK, which is itself enabled whenever any worker's state is transitioning.
         """
         output_func = AlwaysFF('CLK_I', 'RST_ASYNC_I')
 
@@ -281,6 +358,7 @@ class VerilogRenderer:
 
             output_func.add(self.state_regs[worker.name].build_case())
 
+        self.output_function_blocks['_shared'] = output_func
         self.verilog_module.functionals.append(output_func)
 
     @classmethod
@@ -329,6 +407,7 @@ class VerilogRenderer:
 
             output_func.add(self.state_regs[worker.name].build_case())
 
+        self.print_function_blocks['_shared'] = output_func
         self.verilog_module.functionals.append(output_func)
 
     def create_combinationals(self) -> None:

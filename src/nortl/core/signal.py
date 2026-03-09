@@ -317,7 +317,7 @@ class _EventSourceSignal(Generic[T_Signal], _BaseSignal):
 
         if (event := ParameterizedEvent('edge')) not in self.events:
             instance_name = f'I_EVENT_EDGE_DETECTOR_{self.escaped_name}'
-            instance = self.engine.create_module_instance(module_name='nortl_edge_detector', instance_name=instance_name)
+            instance = self.engine.create_module_instance(module_name='nortl_edge_detector', instance_name=instance_name, clock_gating=True)
             self._events[ParameterizedEvent('edge')] = instance
 
             signal_rising = self.engine.define_local(f'EVENT_{self.escaped_name}_rising')
@@ -338,7 +338,7 @@ class _EventSourceSignal(Generic[T_Signal], _BaseSignal):
 
         if event not in self.events:
             instance_name = f'I_DELAY_BY_{cycles}_{self.escaped_name}'
-            instance = self.engine.create_module_instance(module_name='nortl_delay', instance_name=instance_name)
+            instance = self.engine.create_module_instance(module_name='nortl_delay', instance_name=instance_name, clock_gating=True)
             self.engine.override_module_parameter(instance_name, 'DELAY_STEPS', cycles)
             self.engine.override_module_parameter(instance_name, 'DATA_WIDTH', self.width)
 
@@ -357,7 +357,7 @@ class _EventSourceSignal(Generic[T_Signal], _BaseSignal):
         """Create sync module for this signal if it does not exist."""
         if (event := ParameterizedEvent('sync')) not in self.events:
             instance_name = f'I_SYNC_{self.escaped_name}'
-            instance = self.engine.create_module_instance(module_name='nortl_sync', instance_name=instance_name)
+            instance = self.engine.create_module_instance(module_name='nortl_sync', instance_name=instance_name, clock_gating=True)
             self.engine.override_module_parameter(instance_name, 'DATA_WIDTH', self.width)
 
             self._events[event] = instance
