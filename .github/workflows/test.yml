@@ -13,6 +13,5 @@ jobs:
         run: |
           sudo apt-get -y update
           sudo apt-get -y install iverilog
-          sudo apt-get -y install yosys
       - name: Run tox
         run: uv run tox
