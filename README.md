@@ -89,8 +89,11 @@ print(verilog_code)
 ```
 
 ## Citation
-If you use noRTL in your research, please cite consider adding a citation!
+If you use NoRTL in your research, please consider citing it:
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18936677.svg)](https://doi.org/10.5281/zenodo.18936677)
+
+Citations of individual versions are also possible using the version-specific DOIs on the Zenodo-Site. Please use the link of the DOI-badge for more information.
 
 ## Acknowledgement
 
