@@ -12,6 +12,7 @@ from nortl.algorithms import EmptyStateRemovalMixin, ReachabilityAnalysisMixin, 
 from nortl.components import Channel, ElasticChannel, Timer
 from nortl.core import All, Any, Concat, Const, CoreEngine, IfThenElse, Var, Volatile, enable_tracing, to_renderable
 from nortl.core.constructs import Condition, ElseCondition, Fork, ForLoop, Segment, WhileLoop
+from nortl.core.operations import RawText
 from nortl.core.protocols import ParameterProto, Renderable
 
 __all__ = [
@@ -205,6 +206,9 @@ class ManagementMixin(CoreEngine):
         self.state_metadata_template['collapse_sync_depth'] -= 1
         if self.state_metadata_template['collapse_sync_depth'] == 0:
             self.state_metadata_template['collapsable'] = False
+
+    def expose_clk_req(self) -> None:
+        self.define_output('CLK_REQ', 1, value=RawText('GCLK_enable'))
 
 
 class Engine(
