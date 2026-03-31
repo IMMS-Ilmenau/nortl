@@ -149,6 +149,14 @@ class VerilogRenderer:
         output_gate.add_connection('GCLK_O', 'GCLK_output')
         self.verilog_module.instances.append(output_gate)
 
+        # Instantiate per-worker clock gates
+        for worker_name in self.engine.workers:
+            clock_gate = VerilogDeclaration('nortl_clock_gate', f'I_CLOCK_GATE_{worker_name}')
+            clock_gate.add_connection('CLK_I', 'GCLK')
+            clock_gate.add_connection('EN', f'GCLK_{worker_name}_enable')
+            clock_gate.add_connection('GCLK_O', f'GCLK_{worker_name}')
+            self.verilog_module.instances.append(clock_gate)
+
     def create_clock_enable(self, clk_requests: List[str]) -> None:
         """Creates all clock enable signals.
 
@@ -175,7 +183,7 @@ class VerilogRenderer:
                 enable_expr = f'{enable_expr} | {sync_reset_expr}'
 
             cg_proc = AlwaysComb()
-            cg_proc.add(VerilogAssignment(enable_signal, enable_expr))
+            cg_proc.add(VerilogAssignment(enable_signal, enable_expr, '='))
             self.verilog_module.functionals.append(cg_proc)
 
         # Output enable: XOR-based comparison of current output values vs. next values
@@ -184,7 +192,7 @@ class VerilogRenderer:
         # Module-level enable: OR of everything — ensures GCLK reaches all cascaded gates
         all_enables = ['GCLK_output_enable', *worker_enables, *clk_requests]
         module_cg_proc = AlwaysComb()
-        module_cg_proc.add(VerilogAssignment('GCLK_enable', ' | '.join(all_enables)))
+        module_cg_proc.add(VerilogAssignment('GCLK_enable', ' | '.join(all_enables), '='))
         self.verilog_module.functionals.append(module_cg_proc)
 
     def _create_output_clock_enable(self) -> None:
@@ -200,7 +208,7 @@ class VerilogRenderer:
         pulsing_signals = [s for s in self.engine.signals.values() if s.pulsing]
 
         output_en_proc = AlwaysComb()
-        output_en_proc.add(VerilogAssignment('GCLK_output_enable', "1'b0"))
+        output_en_proc.add(VerilogAssignment('GCLK_output_enable', "1'b0", '='))
 
         for worker in self.engine.workers.values():
             state_reg = self.state_regs[worker.name]
@@ -213,17 +221,17 @@ class VerilogRenderer:
                     if assignment.unconditional:
                         # XOR check: enable if current value differs from the value to be assigned
                         check = VerilogIf(assignment.signal != assignment.value)
-                        check.true_branch.add(VerilogAssignment('GCLK_output_enable', "1'b1"))
+                        check.true_branch.add(VerilogAssignment('GCLK_output_enable', "1'b1", '='))
                         case.add_item(state_reg.encode(state.name), check)
                     else:
                         # Conservative for conditional assignments: always enable
-                        case.add_item(state_reg.encode(state.name), VerilogAssignment('GCLK_output_enable', "1'b1"))
+                        case.add_item(state_reg.encode(state.name), VerilogAssignment('GCLK_output_enable', "1'b1", '='))
 
                 # Pulsing signals not assigned in this state will be reset to 0
                 for ps in pulsing_signals:
                     if ps not in unconditionally_assigned:
                         check = VerilogIf(ps != 0)
-                        check.true_branch.add(VerilogAssignment('GCLK_output_enable', "1'b1"))
+                        check.true_branch.add(VerilogAssignment('GCLK_output_enable', "1'b1", '='))
                         case.add_item(state_reg.encode(state.name), check)
 
             output_en_proc.add(case)
@@ -418,7 +426,7 @@ class VerilogRenderer:
         combinationals = AlwaysComb()
 
         for signal, value in self.engine.combinationals:
-            combinationals.add(VerilogAssignment(signal, value))
+            combinationals.add(VerilogAssignment(signal, value, '='))
 
         self.verilog_module.functionals.append(combinationals)
 
@@ -427,5 +435,8 @@ class VerilogRenderer:
 
         This method generates the logic for transitioning the engine from one state to another.
         """
-        for state_reg in self.state_regs.values():
-            self.verilog_module.functionals.append(state_reg.build_state_transition())
+        for worker, state_reg in self.state_regs.items():
+            state_transitions = state_reg.build_state_transition()
+
+            self.state_transition_blocks[worker] = state_transitions
+            self.verilog_module.functionals.append(state_transitions)

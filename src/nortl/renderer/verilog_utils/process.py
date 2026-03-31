@@ -53,16 +53,17 @@ class VerilogAssignment:
         count <= count + 1;
     """
 
-    def __init__(self, tgt: Union[str, VerilogRenderable], src: Union[str, VerilogRenderable]) -> None:
+    def __init__(self, tgt: Union[str, VerilogRenderable], src: Union[str, VerilogRenderable], operator: Literal['<=', '='] = '<=') -> None:
         """Initialize the assignment.
 
         Args:
             tgt: The target signal or expression.
             src: The source signal or expression.
+            operator: The Verilog operator.
         """
         self.tgt = to_verilog_renderable(tgt)
         self.src = to_verilog_renderable(src)
-        self.operator = '<='
+        self.operator = operator
 
     def render(self) -> str:
         """Render the assignment.

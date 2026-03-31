@@ -199,17 +199,17 @@ class StateRegister(StateRegisterBase):
 
     def default_state_assignment(self) -> VerilogBlock:
         block = VerilogBlock()
-        block.add(VerilogAssignment(self.next_state_var, self.state_var))
+        block.add(VerilogAssignment(self.next_state_var, self.state_var, '='))
         return block
 
     def state_transition(self, state: str, next_state: str, condition: Renderable) -> None:
         if condition.render() == "1'h1":
-            self.add_case(state, VerilogAssignment(self.next_state_var, next_state))
+            self.add_case(state, VerilogAssignment(self.next_state_var, next_state, '='))
         elif condition.render() == "1'h0":
             pass
         else:
             item = VerilogIf(condition.render())
-            item.true_branch.add(VerilogAssignment(self.next_state_var, next_state))
+            item.true_branch.add(VerilogAssignment(self.next_state_var, next_state, '='))
             self.add_case(state, item)
 
 
@@ -354,17 +354,17 @@ class OneHotEncodedStateRegister(StateRegisterBase):
 
     def default_state_assignment(self) -> VerilogBlock:
         block = VerilogBlock()
-        block.add(VerilogAssignment(self.next_state_var, self.state_var))
+        block.add(VerilogAssignment(self.next_state_var, self.state_var, '='))
         return block
 
     def state_transition(self, state: str, next_state: str, condition: Renderable) -> None:
         if condition.render() == "1'h1":
-            self.add_case(state, VerilogAssignment(self.next_state_var, self.encode(next_state)))
+            self.add_case(state, VerilogAssignment(self.next_state_var, self.encode(next_state), '='))
         elif condition.render() == "1'h0":
             pass
         else:
             item = VerilogIf(condition.render())
-            item.true_branch.add(VerilogAssignment(self.next_state_var, self.encode(next_state)))
+            item.true_branch.add(VerilogAssignment(self.next_state_var, self.encode(next_state), '='))
             self.add_case(state, item)
 
 
@@ -541,15 +541,15 @@ class MultiHotEncodedStateRegister(StateRegisterBase):
 
     def default_state_assignment(self) -> VerilogBlock:
         block = VerilogBlock()
-        block.add(VerilogAssignment(self.next_state_var, self.state_var))
+        block.add(VerilogAssignment(self.next_state_var, self.state_var, '='))
         return block
 
     def state_transition(self, state: str, next_state: str, condition: Renderable) -> None:
         if condition.render() == "1'h1":
-            self.add_case(state, VerilogAssignment(self.next_state_var, self.encode(next_state)))
+            self.add_case(state, VerilogAssignment(self.next_state_var, self.encode(next_state), '='))
         elif condition.render() == "1'h0":
             pass
         else:
             item = VerilogIf(condition.render())
-            item.true_branch.add(VerilogAssignment(self.next_state_var, self.encode(next_state)))
+            item.true_branch.add(VerilogAssignment(self.next_state_var, self.encode(next_state), '='))
             self.add_case(state, item)

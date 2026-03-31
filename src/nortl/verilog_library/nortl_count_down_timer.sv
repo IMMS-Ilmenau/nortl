@@ -6,21 +6,20 @@ module nortl_count_down_timer #(
 
     input  logic RELOAD,
     input  logic [DATA_WIDTH-1:0] DELAY,
-    output logic ZERO
+    output logic ZERO,
+
+    output logic CLK_REQ
 );
 
 logic [DATA_WIDTH-1:0] counter;
-logic RELOAD_DLY;
 
 always_ff @(posedge CLK_I or posedge RST_ASYNC_I)
 begin
     if (RST_ASYNC_I)
     begin
         counter <= 0;
-        RELOAD_DLY <= 0;
     end
     else begin
-        RELOAD_DLY <= RELOAD;
         if (RELOAD)
         begin
             if (DELAY > 2)
@@ -45,6 +44,10 @@ always_comb begin
     begin
         ZERO = ~RELOAD;
     end
+end
+
+always_comb begin
+    CLK_REQ = RELOAD | (counter > 0);
 end
 
 endmodule

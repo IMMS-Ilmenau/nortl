@@ -63,6 +63,8 @@ def get_modules() -> List[Module]:
     timer.add_port('ZERO')
     timer.add_port('DELAY')
     timer.add_parameter('DATA_WIDTH', 1)
+    timer.add_port('CLK_REQ')
+    timer.set_clk_request('CLK_REQ')
     module_list.append(timer)
 
     cg = ''
