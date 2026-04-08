@@ -16,7 +16,7 @@ class IfThenElse(TernaryRenderer):
         if (result := self.true_value.render(target=target)) == self.false_value.render(target=target):
             return result
         else:
-            return f'{self.condition} ? {self.true_value} : {self.false_value}'
+            return f'({self.condition} ? {self.true_value} : {self.false_value})'
 
     @staticmethod
     def eval(condition: Operand, true_value: Operand, false_value: Operand) -> Optional[Union[Renderable, int]]:
