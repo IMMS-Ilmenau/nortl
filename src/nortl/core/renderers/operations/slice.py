@@ -1,5 +1,6 @@
 """Contant value."""
 
+from math import ceil
 from typing import Optional
 
 from nortl.core.renderers.operations.base import SliceRenderer
@@ -20,11 +21,13 @@ class Slice(SliceRenderer):
             if isinstance(self.index, int):
                 mask = 1
                 offset = self.index
+                width = 1
             else:
-                mask = 2 ** (max(self.index.start, self.index.stop) - min(self.index.start, self.index.stop) + 1) - 1
+                width = max(self.index.start, self.index.stop) - min(self.index.start, self.index.stop) + 1
+                mask = 2**width - 1
                 offset = self.index.stop
 
             if offset != 0:
-                return f'(({self.value} >> {offset}) & {mask})'
+                return f"(({self.value} >> {offset}) & {width}'h{mask:0{ceil(width / 4)}X})"
             else:
-                return f'({self.value} & {mask})'
+                return f"({self.value} & {width}'h{mask:0{ceil(width / 4)}X})"

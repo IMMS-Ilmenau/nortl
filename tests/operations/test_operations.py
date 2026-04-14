@@ -148,15 +148,15 @@ def test_operation_slice() -> None:
 
     # Slices on non-primitive objects must used a mask instead of indexes
     byte0 = design_id[7:0]
-    assert byte0.render() == "(24'h0815A0 & 255)"
+    assert byte0.render() == "(24'h0815A0 & 8'hFF)"
     assert byte0.operand_width == 8
 
     byte1 = design_id[15:8]
-    assert byte1.render() == "((24'h0815A0 >> 8) & 255)"
+    assert byte1.render() == "((24'h0815A0 >> 8) & 8'hFF)"
     assert byte1.operand_width == 8
 
     bit = design_id[17]
-    assert bit.render() == "((24'h0815A0 >> 17) & 1)"
+    assert bit.render() == "((24'h0815A0 >> 17) & 1'h1)"
     assert bit.operand_width == 1
 
 
