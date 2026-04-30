@@ -8,7 +8,7 @@ from types import FrameType
 
 import pytest
 
-from nortl.core import Const
+from nortl.core import Const, IfThenElse, Volatile
 from nortl.core.constructs import Condition, ElseCondition, Fork
 from nortl.core.modifiers import UnregisteredRead
 from nortl.core.operations import to_renderable
@@ -94,6 +94,7 @@ class NoRTLTestBase[T: EngineProto](ABC):
         self.error_ctr = self.engine.define_local('error_ctr', 16, 0)
         self.timeout = self.engine.define_output('timeout', 1, 0)
         ctr = self.engine.define_local('timeout_ctr', 16, 0)
+        self._reset_timeout = Volatile(self.engine.define_local('reset_timeout', 1, 0))
 
         self.engine.sync()
 
@@ -103,7 +104,7 @@ class NoRTLTestBase[T: EngineProto](ABC):
             self.the_testbench(self.engine)
         with Fork(self.engine, 'timeout') as t_timeout:
             self.engine.sync()
-            self.engine.set(ctr, ctr + 1)
+            self.engine.set(ctr, IfThenElse(self._reset_timeout, 0, ctr + 1))
             with Condition(self.engine, ctr == 0xFFFF):
                 self.engine.set(self.timeout, 1)
                 t_timeout.finish()
@@ -172,6 +173,12 @@ class NoRTLTestBase[T: EngineProto](ABC):
         code_context = re.sub('#.*', '', code_context)
         code_context = code_context.lstrip().rstrip()
         self.engine.print(f'Assertion \\"{code_context}\\" failed at {fi.filename}:{frame.f_lineno}')
+
+    def reset_timeout(self) -> None:
+        self.engine.set(self._reset_timeout, 1)
+        self.engine.sync()
+        self.engine.set(self._reset_timeout, 0)
+        self.engine.sync()
 
     def assertTrue(self, condition: Renderable | int) -> None:  # noqa: N802
         """Asserts that a condition is true.

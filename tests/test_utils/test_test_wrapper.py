@@ -61,3 +61,29 @@ class TestTheTestWrapperWithTimeout(NoRTLTestBase[CoreEngine]):
         # Normally, we get a fail due to the timeout signal, so we need to decrement the error_ctr to mask ths
         self.assertTrue(engine.signals['timeout'])
         self.finish_simulation()
+
+
+class TestTheTestWrapperWithTimeoutReset(NoRTLTestBase[CoreEngine]):
+    def init_sequence(self) -> Engine:
+        self.expect_timeout = 1
+
+        f = Engine('my_engine')
+        f.define_local('testreg', 4, 0)
+        c = f.define_local('channel', 4, 0)
+        self.ctr = f.define_local('test_ctr', 24, 0)
+        c.access_checker.disable_check('identical_rw')
+        return f
+
+    def dut(self, engine: CoreEngine) -> None:
+        with WhileLoop(engine, self.ctr < 0x10010):  # endless loop
+            engine.set(self.ctr, self.ctr + 1)
+            self.reset_timeout()
+            engine.sync()
+
+        self.assertEqual(self.ctr, 0x10010)
+
+    def the_testbench(self, engine: CoreEngine) -> None:
+        pass
+
+    def verify_final_state(self, engine: CoreEngine) -> None:
+        self.finish_simulation()
