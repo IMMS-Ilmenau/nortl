@@ -12,16 +12,10 @@ from nortl.components.channel import Channel
 
 engine = Engine("ParallelDemo")
 out = engine.define_output("RESULT", 16)
-channel = Channel(engine, width=16, name='data_pipe')
 
 # Spawn a parallel thread
 with engine.fork("data_processor") as proc_thread:
     # This code runs in parallel with the main thread
-    engine.set(channel.data, 42)
-    engine.set(channel.valid, 1)
-    engine.wait_for(channel.ready)
-    engine.set(channel.valid, 0)
-    engine.set(channel.data, 0)
     engine.sync()
 
 # Main thread continues here while 'proc_thread' is still running
@@ -36,6 +30,8 @@ The `join()` method blocks the main thread until the spawned thread completes. T
 * `thread.join()`: Waits until the thread's worker returns to its idle state. Automatically releases scratch signals and frees signal access rights.
 * `thread.cancel()`: Sends a synchronous reset to the thread's worker, forcibly stopping it and recursively cancelling any child threads.
 * `thread.finish()`: Explicitly terminates the thread's current execution path.
+
+noRTL supports nested fork/join structures. In this case, it will allocate the necessary workers automatically. Also the `cancel()` and `join()` functions will handle the interaction with child threads of the currently running thread.
 
 ## Access Checks & Signal Ownership
 
