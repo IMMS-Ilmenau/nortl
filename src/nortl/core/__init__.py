@@ -9,6 +9,7 @@ from .exceptions import (
     TransitionLockError,
     TransitionRestrictionError,
     UnfinishedForwardDeclarationError,
+    UnreachableTransitionError,
     WriteViolationError,
 )
 from .modifiers import Volatile
@@ -35,6 +36,7 @@ __all__ = [
     'TransitionLockError',
     'TransitionRestrictionError',
     'UnfinishedForwardDeclarationError',
+    'UnreachableTransitionError',
     'Var',
     'Volatile',
     'WriteViolationError',

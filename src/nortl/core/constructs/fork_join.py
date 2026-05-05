@@ -110,9 +110,11 @@ class Fork:
     ) -> None:
         if exc_type is not None:
             return
+
         # Finalize fork body
-        self.engine.sync()
-        self.assigned_thread.finish()
+        if len(self.engine.current_state.transitions) == 0:
+            self.engine.sync()
+            self.assigned_thread.finish()
 
         # Return to old worker + state
         self.engine.current_worker = self.checkpoint_worker

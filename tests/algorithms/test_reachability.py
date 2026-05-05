@@ -14,19 +14,6 @@ def test_reachability_all_reachable() -> None:
             assert state.get_metadata('reachable', True)
 
 
-def test_reachability_unreachable_condition() -> None:
-    e = Engine('my_engine')
-
-    with e.condition(Const(0) == 1):
-        e.sync()
-        save_state = e.current_state
-        e.sync()
-
-    e.reachability_analysis()
-
-    assert not save_state.get_metadata('reachable')
-
-
 def test_reachability_in_fork() -> None:
     e = Engine('my_engine')
 
@@ -43,23 +30,34 @@ def test_reachability_in_fork() -> None:
     assert save_state.get_metadata('reachable')
 
 
-def test_reachability_unreachable_fork() -> None:
+def test_reachability_floating() -> None:
     e = Engine('my_engine')
 
-    with e.condition(Const(1) == 1):
+    # Create floating segment of states
+    e.current_state = e.create_state()
+    e.sync()
+    save_state = e.current_state
+    e.sync()
+
+    e.reachability_analysis()
+
+    assert not save_state.get_metadata('reachable')
+
+
+def test_reachability_unreachable_fork() -> None:
+    e = Engine('my_engine')
+    e.sync()
+
+    with e.fork('test'):
         e.sync()
-        with e.fork('test'):
-            e.sync()
-            save_state1 = e.current_state
-            e.sync()
+        save_state1 = e.current_state
         e.sync()
 
-    with e.condition(Const(1) == 0):
+    # Create floating segment of states
+    e.current_state = e.create_state()
+    with e.fork('test2'):
         e.sync()
-        with e.fork('test2'):
-            e.sync()
-            save_state2 = e.current_state
-            e.sync()
+        save_state2 = e.current_state
         e.sync()
 
     e.reachability_analysis()
@@ -70,13 +68,24 @@ def test_reachability_unreachable_fork() -> None:
 
 def test_reachability_prune_unreachable() -> None:
     e = Engine('my_engine')
+    e.sync()
+    e.sync()
+    e.sync()
 
-    with e.condition(Const(0) == 1):
-        e.sync()
-        save_state = e.current_state
-        e.sync()
+    # Create floating segment of states
+    e.current_state = e.create_state()
+    e.sync()
+    save_state = e.current_state
+    e.sync()
+
+    states_before = len(e.main_worker.states)
 
     e.prune_unreachable_states()
+    state_after = len(e.main_worker.states)
+
+    # Pruning should have deleted 3 states
+    assert state_after < states_before
+    assert state_after == states_before - 3
 
     for statelist in e.states.values():
         assert save_state not in statelist

@@ -244,11 +244,17 @@ class Worker(NamedEntity):
             raise OwnershipError('State does not belong to this engine.')
         if state not in self.states:
             raise OwnershipError('State does not belong to this worker.')
-        if self._next_state is not None and state is not self._next_state:
-            raise UnfinishedForwardDeclarationError(
-                'You have forward-declared the next state (by using next_state), but are now trying to set another state as the current one. '
-                'This may result in dead-end states and is therefore forbidden. Please switch to the next_state and modify it first.'
-            )
+        if self._next_state is not None:
+            if state is not self._next_state:
+                raise UnfinishedForwardDeclarationError(
+                    'You have forward-declared the next state (by using next_state), but are now trying to set another state as the current one. '
+                    'This may result in dead-end states and is therefore forbidden. Please switch to the next_state and modify it first.'
+                )
+            elif self._next_state not in (target for (_, target) in self.current_state.transitions):
+                raise UnfinishedForwardDeclarationError(
+                    'You have forward-declared the next state (by using next_state), but there is no transition from the current state to it.'
+                )
+
         if state is not self.current_state:
             self._next_state = None  # Clear next state
         self._current_state = state  # type: ignore[assignment]

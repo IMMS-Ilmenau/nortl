@@ -1,7 +1,7 @@
 import pytest
 
 from nortl.core.engine import CoreEngine
-from nortl.core.exceptions import ConflictingAssignmentError, WriteViolationError
+from nortl.core.exceptions import ConflictingAssignmentError, UnfinishedForwardDeclarationError, UnreachableTransitionError, WriteViolationError
 from nortl.core.module import Module
 from nortl.core.operations import All, Any, Const, Var
 from nortl.core.signal import Signal
@@ -326,10 +326,63 @@ def test_engine_jump_if_invalid_condition() -> None:
         engine.jump_if('invalid_condition', engine.next_state)  # type: ignore
 
 
+def test_engine_jump_if_constant_condition() -> None:
+    """Test behavior of the jump_if method with constant condition, without fast_state."""
+    engine = CoreEngine('my_engine')
+
+    # Constant True condition is fine
+    engine.jump_if(Const(True), engine.next_state)
+    engine.current_state = engine.next_state
+
+    # Constant False condition will raise an error
+    with pytest.raises(UnreachableTransitionError):
+        engine.jump_if(Const(False), engine.next_state)
+
+    # It is possible to "short circuit" the False condition. In this case, no transition is added
+    engine.jump_if(Const(False), engine.next_state, allow_short_circuit=True)
+    assert len(engine.current_state.transitions) == 0
+
+
+def test_engine_jump_if_constant_condition_false_state() -> None:
+    """Test behavior of the jump_if method with constant conditions, with false_state."""
+    engine = CoreEngine('my_engine')
+
+    other_state = engine.create_state()
+
+    # If the jump_if contains a true_state and false_state, one of both would become unreachable
+    # By default, this will raise an exception
+    with pytest.raises(UnreachableTransitionError):
+        engine.jump_if(Const(True), engine.next_state, other_state)
+
+    with pytest.raises(UnreachableTransitionError):
+        engine.jump_if(Const(False), engine.next_state, other_state)
+
+    # If short-circuiting allowed, the unreachable transition is not added
+    engine.jump_if(Const(True), engine.next_state, other_state, allow_short_circuit=True)
+    assert len(engine.current_state.transitions) == 1
+    engine.current_state.transitions[0][1] == engine.next_state
+    engine.current_state = engine.next_state
+
+    # If short-circuiting allowed, the unreachable transition is not added
+    some_state = engine.create_state()  # next_state must not be used, because the transition to it will be helplessly broken
+    engine.jump_if(Const(False), some_state, other_state, allow_short_circuit=True)
+    assert len(engine.current_state.transitions) == 1
+    engine.current_state.transitions[0][1] == other_state
+    engine.current_state = other_state
+
+
 def test_engine_sync() -> None:
     """Test that the sync method can be used correctly."""
     engine = CoreEngine('my_engine')
     engine.sync()
+
+
+def test_engine_next_state_missing_transition() -> None:
+    """Test switching to forward-declared next state without creating a transition."""
+    engine = CoreEngine('my_engine')
+
+    with pytest.raises(UnfinishedForwardDeclarationError):
+        engine.current_state = engine.next_state
 
 
 def test_engine_define_module() -> None:

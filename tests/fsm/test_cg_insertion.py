@@ -329,7 +329,6 @@ def test_CG_equiv_simple(encoding: ENCODINGS) -> None:
     with Condition(engine, output == Const(10)):
         engine.jump_if(Const(1), engine.reset_state)
     engine.jump_if(Const(1), loop)
-    engine.current_state = engine.next_state
 
     check_cg_equiv(engine, encoding)
 

@@ -523,7 +523,9 @@ class EngineProto(_StateManager, Protocol):
 
     def wait_for(self, condition: Renderable) -> None: ...
 
-    def jump_if(self, condition: Renderable, true_state: StateProto, false_state: Optional[StateProto] = None) -> None: ...
+    def jump_if(
+        self, condition: Renderable, true_state: StateProto, false_state: Optional[StateProto] = None, allow_short_circuit: bool = False
+    ) -> None: ...
 
     # Debugging Prints
 

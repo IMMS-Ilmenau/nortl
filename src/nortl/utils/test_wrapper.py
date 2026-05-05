@@ -8,10 +8,10 @@ from types import FrameType
 
 import pytest
 
-from nortl.core import Const, IfThenElse, Volatile
+from nortl.core import IfThenElse, Volatile
 from nortl.core.constructs import Condition, ElseCondition, Fork
 from nortl.core.modifiers import UnregisteredRead
-from nortl.core.operations import to_renderable
+from nortl.core.operations import Var, to_renderable
 from nortl.core.protocols import EngineProto, Renderable
 from nortl.renderer.verilog_renderer import VerilogRenderer
 
@@ -194,7 +194,8 @@ class NoRTLTestBase[T: EngineProto](ABC):
             condition (Renderable | int): The condition to assert as true
         """
         if isinstance(condition, int):
-            condition = Const(condition, 1)
+            # Condition must be a Var, to bypass the constant-value check for the conditional transition.
+            condition = Var(condition, 1)
 
         with Condition(self.engine, UnregisteredRead(~to_renderable(condition))):
             frame = currentframe()

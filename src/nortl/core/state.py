@@ -414,10 +414,10 @@ class State(NamedEntity):
     def _add_transition(self, condition: Renderable, state: StateProto) -> None:
         """Add transition to other state."""
         if self._transitions_locked:
-            raise TransitionLockError('The transitions for this state have been locked. You cannot add any other transitions.')
+            raise TransitionLockError(f'The transitions for state {self.name} have been locked. You cannot add any other transitions.')
         elif self._restricted_state is not None and state is not self._restricted_state:
             raise TransitionRestrictionError(
-                f'This state was restricted to transitions to state {self._restricted_state.name}. Unable to add other transitions.'
+                f'State {self.name} was restricted to transitions to state {self._restricted_state.name}. Unable to add other transitions.'
             )
         elif self.worker is not state.worker:
             raise RuntimeError('Tried to create a transition to a state outside of the current worker. This is not allowed!')
@@ -429,7 +429,7 @@ class State(NamedEntity):
         """Restrict transitions to only allow one other state."""
         if self._restricted_state is not None and state is not self._restricted_state:
             raise TransitionRestrictionError(
-                f'This state was alreay restricted to transitions to state {self._restricted_state.name}. Unable to restrict for another state.'
+                f'State {self.name} was alreay restricted to transitions to state {self._restricted_state.name}. Unable to restrict for another state.'
             )
         self._restricted_state = state  # type: ignore[assignment]
 

@@ -2,7 +2,7 @@
 
 from typing import Any, ClassVar, Dict, Mapping, Optional, Sequence, Set, Tuple, Union
 
-from nortl.core.exceptions import OwnershipError, TransitionLockError, read_access, write_access
+from nortl.core.exceptions import OwnershipError, TransitionLockError, UnreachableTransitionError, read_access, write_access
 from nortl.core.manager import ScratchManager, SignalManager
 from nortl.core.module import Module, ModuleInstance
 from nortl.core.operations import Const, to_renderable
@@ -405,7 +405,7 @@ class CoreEngine:
             allow_short_circuit: If the selector is not in prioritized order (because no `'default'` is provided), but one condition is found to be
                 always True, the other conditions would be unreachable. This is a violation of the rules of `unique if`.
                 If `allow_short_circuit` is True, noRTL will remove all other conditions, and only keep the always-True condition.
-                If it is False , noRTL will raise an exception to avoid downstream issues in the Verilog code.
+                If it is False, noRTL will raise an exception to avoid downstream issues in the Verilog code.
 
         Example:
             The following example defines a 2x2 Input AND into 2-Input OR gate.
@@ -492,6 +492,9 @@ class CoreEngine:
         This creates a new state and sets it as new current state.
         It also locks the transitions for the current state. You cannot add any more transitions to it.
         """
+
+        if len(self.current_state.transitions) > 0:
+            raise UnreachableTransitionError('State already has transitions. It is not possible to use sync().')
         self.current_state._add_transition(Const(True), self.next_state)
         self.current_state._lock_transitions()
         self.current_state = self.next_state
@@ -522,7 +525,9 @@ class CoreEngine:
         self.current_state._lock_transitions()
         self.current_state = self.next_state
 
-    def jump_if(self, condition: Renderable, true_state: StateProto, false_state: Optional[StateProto] = None) -> None:
+    def jump_if(  # noqa: C901
+        self, condition: Renderable, true_state: StateProto, false_state: Optional[StateProto] = None, allow_short_circuit: bool = False
+    ) -> None:
         """Jump to a certain state, if condition is met.
 
         If the condition is not met, the engine stays in this state. jump_if can be used multiple times, as long as false_state is omitted.
@@ -537,6 +542,9 @@ class CoreEngine:
             condition: The condition to jump if.
             true_state: The state to jump to if the condition is met.
             false_state: The state to jump to if the condition is not met.
+            allow_short_circuit: If the condition is found to be always True or False, one of the target states will be unreachable.
+                If `allow_short_circuit` is True, noRTL will remove the unreachable target state, and only keep the always-True transition.
+                If it is False, noRTL will raise an exception to avoid downstream issues in the Verilog code.
 
         Raises:
             ValueError: If the condition is not a Renderable instance.
@@ -556,10 +564,34 @@ class CoreEngine:
             if false_state not in self.current_worker.states:
                 raise ValueError('Target state does not exist in current thread')
 
-        self.current_state._add_transition(read_access(to_renderable(condition)), true_state)
+        # Check for constant conditions
+        if condition.is_constant and not allow_short_circuit:
+            if condition.value == 1 and false_state is not None:  # type: ignore[attr-defined]
+                raise UnreachableTransitionError(
+                    f'Jump condition is constantly True. Therefore, the transition to {false_state.name} will never be taken.\n'
+                    f'To allow noRTL to ignore the transition to {false_state.name} and only keep the unconditional transition to {true_state.name}, '
+                    'set `allow_short_circuit=True`.'
+                )
+            elif condition.value == 0:  # type: ignore[attr-defined]
+                if false_state is not None:
+                    raise UnreachableTransitionError(
+                        f'Jump condition is constantly False. Therefore, the transition to {true_state.name} will never be taken.\n'
+                        f'To allow noRTL to ignore the transition to {true_state.name} and only keep the unconditional transition to '
+                        '{false_state.name}, set `allow_short_circuit=True`.'
+                    )
+                else:
+                    raise UnreachableTransitionError(
+                        f'Jump condition is constantly False. Therefore, the transition to {true_state.name} will never be taken.\n'
+                        f'To allow noRTL to ignore the transition to {true_state.name}, set `allow_short_circuit=True`.'
+                    )
 
-        if false_state is not None:
+        if not condition.is_constant or condition.value == 1:  # type: ignore[attr-defined]
+            self.current_state._add_transition(read_access(to_renderable(condition)), true_state)
+
+        if false_state is not None and (not condition.is_constant or condition.value == 0):  # type: ignore[attr-defined]
             self.current_state._add_transition(to_renderable(~condition), false_state)
+
+        if condition.is_constant or false_state is not None:
             self.current_state._lock_transitions()
 
     # Debugging Prints

@@ -15,6 +15,7 @@ __all__ = [
     'TransitionLockError',
     'TransitionRestrictionError',
     'UnfinishedForwardDeclarationError',
+    'UnreachableTransitionError',
     'WriteViolationError',
     'read_access',
     'write_access',
@@ -114,6 +115,10 @@ class TransitionLockError(TransitionError):
 
 class TransitionRestrictionError(TransitionError):
     """This error occurs when attempting to add new transitions to a state that has been restricted to transition to a specific other state."""
+
+
+class UnreachableTransitionError(TransitionError):
+    """This error occurs when attempting to add transitions, that are never taken, because their condition is never met."""
 
 
 # Assignment Errors

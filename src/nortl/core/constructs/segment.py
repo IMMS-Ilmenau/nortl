@@ -807,7 +807,7 @@ class SegmentImplementation[T: Union[EngineProto, HelperProto], **P, R: Optional
             input_slots, args, kwargs = self.add_input_slots(args, kwargs)
 
             # Create floating state, the transition(s) to it are added by _call_segment
-            start_state = self.engine.current_state = self.engine.next_state
+            start_state = self.engine.current_state = self.engine.create_state()
 
             # Call the decorated method to render it into the segment
             result = self.method(*args, **kwargs)

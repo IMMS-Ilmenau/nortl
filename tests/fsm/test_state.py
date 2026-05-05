@@ -1,4 +1,7 @@
+import pytest
+
 from nortl import Const, Engine
+from nortl.core.exceptions import UnreachableTransitionError
 
 
 def test_unreachable_transitions_not_added() -> None:
@@ -8,7 +11,8 @@ def test_unreachable_transitions_not_added() -> None:
 
     c = Const(1)
 
-    e.jump_if(c == 0, e.reset_state)  # Transition that is never taken
+    with pytest.raises(UnreachableTransitionError):
+        e.jump_if(c == 0, e.reset_state)  # Transition that is never taken
 
     assert len(e.current_state.transitions) == 0
 

@@ -1,4 +1,5 @@
 from types import TracebackType
+from typing import Optional
 
 from nortl.core import Const
 from nortl.core.operations import to_renderable
@@ -124,17 +125,21 @@ class WhileLoop:
         self.condition = to_renderable(condition)
 
         self.start_state: StateProto
-        self.final_state: StateProto
+        self.final_state: Optional[StateProto] = None
 
     def __enter__(self) -> None:
         self.start_state = self.engine.current_state
-        self.final_state = self.engine.create_state()
 
-        # Add conditional jump to start state
-        self.engine.jump_if(self.condition, self.engine.next_state, self.final_state)
+        if self.condition.is_constant and self.condition.value == 1:  # type: ignore[attr-defined]
+            self.engine.sync()
+        else:
+            self.final_state = self.engine.create_state()
 
-        # Switch to loop content and yield back
-        self.engine.current_state = self.engine.next_state
+            # Add conditional jump to start state
+            self.engine.jump_if(self.condition, self.engine.next_state, self.final_state)
+
+            # Switch to loop content and yield back
+            self.engine.current_state = self.engine.next_state
 
         # TODO consider moving this into the engine itself
         self.engine.scratch_manager.enter_context()
@@ -153,6 +158,7 @@ class WhileLoop:
         self.engine.jump_if(Const(True), self.start_state)
 
         # Goto final state
-        self.engine.current_state = self.final_state
+        if self.final_state is not None:
+            self.engine.current_state = self.final_state
 
         self.engine.scratch_manager.exit_context()

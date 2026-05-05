@@ -1,6 +1,7 @@
 from types import TracebackType
 
 from nortl.core import Any, Const
+from nortl.core.exceptions import UnreachableTransitionError
 from nortl.core.protocols import EngineProto, Renderable
 from nortl.core.state import State
 
@@ -75,7 +76,14 @@ class Condition:
     def __enter__(self) -> None:
         """Executes the provided function if the condition is met."""
         conditional_state = self.engine.create_state()
-        self.engine.jump_if(self.condition, conditional_state)
+        try:
+            self.engine.jump_if(self.condition, conditional_state)
+        except UnreachableTransitionError as e:
+            raise RuntimeError(
+                f'Condition {self.condition} is constantly False.\n'
+                f'This means, that the code wrapped in the {type(self).__name__} context will never be executed.'
+            ) from e
+
         self.engine.current_state = conditional_state
 
         # TODO consider moving this into the engine itself
@@ -91,7 +99,7 @@ class Condition:
             return
         jumpconds = [t[0] for t in self.engine.current_state.transitions]
         if Const(1) not in jumpconds:
-            self.engine.jump_if(Const(1, 1), self.final_state)
+            self.engine.jump_if(Const(True), self.final_state)
         self.engine.current_state = self.final_state
 
         self.engine.scratch_manager.exit_context()
@@ -106,7 +114,7 @@ def get_else_condition(state: State) -> Renderable:
         conditions.append(c)
 
     if len(conditions) == 0:
-        return Const(1, 1)
+        return Const(True)
 
     return ~Any(*conditions)
 
