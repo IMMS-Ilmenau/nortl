@@ -14,6 +14,8 @@ from nortl.core import All, Any, Concat, Const, CoreEngine, IfThenElse, Var, Vol
 from nortl.core.constructs import Condition, ElseCondition, Fork, ForLoop, Segment, WhileLoop
 from nortl.core.operations import RawText
 from nortl.core.protocols import ParameterProto, Renderable
+from nortl.renderer.verilog_renderer import VerilogRenderer
+from nortl.renderer.verilog_utils import ENCODINGS
 
 __all__ = [
     'All',
@@ -211,10 +213,21 @@ class ManagementMixin(CoreEngine):
         self.define_output('CLK_REQ', 1, value=RawText('GCLK_enable'))
 
 
+class RendererMixin(CoreEngine):
+    """Provide interface to renderer."""
+
+    def to_verilog(
+        self, include_modules: bool = True, clock_gating: bool = False, encoding: ENCODINGS = 'binary', support_unique_if: bool = False
+    ) -> str:
+        renderer = VerilogRenderer(self, include_modules, clock_gating, encoding, support_unique_if)
+        return renderer.render()
+
+
 class Engine(
     ComponentsMixin,
     ConstructsMixin,
     ManagementMixin,
+    RendererMixin,
     ReachabilityAnalysisMixin,
     StateMergerMixin,
     EmptyStateRemovalMixin,

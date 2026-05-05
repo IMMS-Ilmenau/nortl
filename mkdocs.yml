@@ -7,6 +7,16 @@ site_url: https://IMMS-Ilmenau.github.io/nortl
 nav:
   - Home:
     - index.md
+  - Tutorial:
+    - Tutorial Home: tutorial/index.md
+    - Your first Engine: tutorial/00_first_engine.md
+    - Control Structures: tutorial/01_control_structures.md
+    - Signals: tutorial/02_signals.md
+    - Classes: tutorial/03_classes.md
+    - Parallel Behavior: tutorial/04_parallel.md
+    - Channels: tutorial/05_channel.md
+    - Test with Pytest: tutorial/06_pytest.md
+    - Verilog Integration: tutorial/07_verilog_integration.md
   - User Guide:
     - Installation: user_guide/installation.md
     - Engine: user_guide/engine.md

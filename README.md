@@ -73,7 +73,7 @@ enable = engine.define_input("enable", width=1)
 output = engine.define_output("output", width=1, reset_value=0)
 
 # Don't define states -- define behavior!
-with engine.while_loop(Const(1)):
+with engine.while_loop(Const(True)):
     engine.wait_for(enable == 1)
     engine.set(output, 1)
     engine.sync() # Wait one clock cycle
@@ -81,9 +81,7 @@ with engine.while_loop(Const(1)):
     engine.wait_for(enable == 0)
 
 # Generate SystemVerilog code
-from nortl.renderer import VerilogRenderer
-renderer = VerilogRenderer(engine)
-verilog_code = renderer.render()
+verilog_code = engine.to_verilog()
 
 print(verilog_code)
 ```
