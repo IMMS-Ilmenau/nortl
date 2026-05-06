@@ -86,6 +86,7 @@ def read_data(engine: EngineProto) -> Union[Renderable, int]:
 
 ### Dynamic Slot Widths
 Slot widths can be configured flexibly to match your design needs:
+
 * **Fixed Width:** `@Segment.with_input_slots(data=8)` uses a constant bit-width.
 * **String References:** `@Segment.with_input_slots(data='width')` copies the width from another argument at runtime.
 * **Automatic Detection:** `@Segment.with_input_slots(data=True)` infers the width from the first call's `operand_width`.

@@ -21,6 +21,7 @@ Scratch signals are designed to simplify complex control logic by providing temp
 
 ### Use-Cases
 Use scratch signals when you need temporary storage that shouldn't pollute your global signal namespace or require explicit reset logic. Common examples include:
+
 * Returning data from functions.
 * Holding intermediate results during multi-step arithmetic or logic operations.
 * Acting as temporary counters or indices for loops and array accesses.

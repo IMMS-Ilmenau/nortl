@@ -27,6 +27,7 @@ engine.set(out, 1)
 ```
 
 The `join()` method blocks the main thread until the spawned thread completes. Threads can also be explicitly finished or cancelled:
+
 * `thread.join()`: Waits until the thread's worker returns to its idle state. Automatically releases scratch signals and frees signal access rights.
 * `thread.cancel()`: Sends a synchronous reset to the thread's worker, forcibly stopping it and recursively cancelling any child threads.
 * `thread.finish()`: Explicitly terminates the thread's current execution path.
@@ -38,6 +39,7 @@ noRTL supports nested fork/join structures. In this case, it will allocate the n
 In hardware, signals are shared resources. When multiple threads or workers run in parallel, they might try to read or write the same signal at the same time. Unlike software, hardware doesn't have built-in thread locks, so race conditions can easily corrupt your design. noRTL solves this by implementing **static access checks** that track which thread last accessed a signal.
 
 Every time you read or write a signal, noRTL records the current thread. If another thread tries to access that signal without the first thread having finished, noRTL will raise a clear error:
+
 * `ExclusiveWriteError`: Two threads are trying to drive the same signal simultaneously.
 * `NonIdenticalRWError`: One thread is writing while another is reading, creating a potential race condition.
 * `ExclusiveReadError`: Multiple threads are reading the same signal concurrently (often a sign of unintended sharing).
