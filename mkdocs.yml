@@ -17,6 +17,7 @@ nav:
     - Channels: tutorial/05_channel.md
     - Test with Pytest: tutorial/06_pytest.md
     - Verilog Integration: tutorial/07_verilog_integration.md
+    - Segments: tutorial/08_segments.md
   - User Guide:
     - Installation: user_guide/installation.md
     - Engine: user_guide/engine.md
