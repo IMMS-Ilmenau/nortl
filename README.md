@@ -6,6 +6,9 @@
 
 The code that is written for **noRTL** is pure Python code. The **noRTL** package realizes state handling and data structure assembly for you while the Python code is executed. **noRTL** can be understood as a fancy generator that assembles state machines and provides the tooling to render it to SystemVerilog and tools for verifying your code.
 
+Want to start right away? [Look at our Tutorial section!](https://imms-ilmenau.github.io/nortl/tutorial/)
+
+
 ## Main ideas
 
 **noRTL** is built with the following concepts and ideas.
