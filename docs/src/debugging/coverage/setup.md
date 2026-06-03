@@ -247,6 +247,8 @@ The objects contain the number of covered, uncovered and total states and transi
 !!! experimental
 
     Coverage annotation is experimental.
+    The current implementation uses [pydantic](https://pydantic.dev) to parse the individual JSON records from the coverage files.
+    This is extremely slow and needs to be improved in the future.
 
 ### Checking Coverpoints and Covergroups
 
