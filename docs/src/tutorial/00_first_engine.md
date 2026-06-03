@@ -1,7 +1,9 @@
 
 # Creating your first engine
+
 The idea of noRTL is that we create an object for our target hardware component and then use our code to modify it such that it realizes the function we want.
 The main entry point for importing the noRTL engine is:
+
 ```python
 from nortl import Engine
 ```
@@ -36,6 +38,7 @@ engine = Engine("MrCoffee")
 The engine name (here: "MrCoffee") needs to be a proper verilog identifier since it will be the module name of our resulting verilog unit.
 
 ## Defining inputs and outputs
+
 Now it is time to define the interface of our system. Note that noRTL cares about reset and clock pins so we do not have to include these here.
 
 The engine object provides two functions for declaring ports (function signatures are truncated to keep the explanation simple):
@@ -56,22 +59,27 @@ ready = engine.define_output("READY", 1) # Show the user that we are ready to br
 ```
 
 ## Describing the process
+
 The idea of noRTL is that you can describe your process in a more-or-less sequential manner without manually creating states.
 
 For brewing coffee, we need to realize delays in our system to let the grinding process work for some seconds.
 Therefore we add a timer to our system assuming that we know our clock frequency.
 
 ```python
+from nortl import Timer
+
 timer = Timer(engine, 24) # Add a 24 bit timer to our engine
-fclk = 1e6 # 1MHz in our example
+fclk = int(1e6) # 1MHz in our example
 ```
 
 In case of our Mr. Coffee, the code can look like this:
+
 ```python
+from nortl import Const
 
 with engine.while_loop(Const(True)): # A forever-loop to restart the process after we finished
     engine.wait_for(start.rising()) # Wait until the user presses the button
-    engine.set(read, 0)
+    engine.set(ready, 0)
     engine.set(heater_en, 1) # Turn on the heater. Note that we need to use the set-method to write a value to a signal
     engine.set(grinder_en, 1) # Activate the grinder
     timer.wait_delay(fclk*1) # Wait for one second
@@ -92,13 +100,12 @@ We see the following noRTL constructs in our code:
 * `engine.sync()`: Advances to the next clock cycle
 * `timer.wait_delay(n_cycles: int)` Waits for a specified number of cycles using the instantiated timer.
 
-
 ## Generating Verilog Code
+
 After we described the logic for our circuit, we need to transfer it to the verilog domain. For this purpose, noRTL realizes so-called renderers.
 We can just call a function of the engine, get the verilog code and save it to a file.
 
 ```python
 with open('MrCoffee.sv', 'w') as fptr:
     fptr.write(engine.to_verilog())
-
 ```

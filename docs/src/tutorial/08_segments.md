@@ -3,6 +3,7 @@
 As your hardware designs grow, keeping all state transitions, signal definitions, and timing logic in a single script quickly becomes unmanageable. While Python functions are excellent for organizing code, calling them normally in noRTL would create a new, separate sequence of states for every call. **Segments** solve this by allowing you to reuse state sequences and drastically reduce the total number of states in your design.
 
 ## Why use Segments?
+
 In hardware description, every step in your Python code typically maps to a state in the generated finite state machine (FSM). Without segments, reusing logic (like a UART transmitter or a data processing pipeline) would duplicate states, bloating your design and increasing routing congestion. Segments allow noRTL to:
 
 * **Reduce State Count:** Identical calls to a segment re-use the same underlying state sequence, sharing transitions and logic. A limited number of states leads to a reduced ressource demand due to large multiplexers (which is especially critical for FPGAs)
@@ -10,9 +11,11 @@ In hardware description, every step in your Python code typically maps to a stat
 * **Manage Memory Efficiently:** Automatically handle temporary signals and memory zones for intermediate calculations using scratch managers.
 
 ## How to use Segments
+
 You define a segment by decorating a Python function or method with `@Segment`. noRTL analyzes the call signature automatically. The first time a specific signature is called, noRTL executes the function body to generate the corresponding states and transitions. Subsequent calls with the same signature simply jump to the start of that segment and return to the next state after completion.
 
 ### Standalone Functions
+
 The most common use case is decorating standalone functions that take the `Engine` (or a helper object) as their first argument.
 
 ```python
@@ -42,6 +45,7 @@ with engine.while_loop(True):
 * When `send_byte(engine, 0x4B)` is called subsequently, noRTL recognizes the identical signature. Instead of generating new states, it inserts a transition that jumps directly to the entry state of the existing sequence. Both calls share the exact same underlying hardware logic and state machine path, demonstrating efficient resource reuse.
 
 ### Class Methods
+
 You can also attach segments to methods of helper classes. This is ideal for encapsulating complex subsystems while keeping the top-level script clean.
 
 ```python
@@ -63,6 +67,7 @@ with engine.while_loop(True):
 ```
 
 ## Input and Output Slots
+
 By default, noRTL creates a new state sequence for every unique combination of arguments. If you want to reuse a single state sequence regardless of the input values, you can use **Input Slots**.
 
 Input slots tell noRTL to copy the arguments into temporary scratch signals *before* entering the segment. This allows the segment to ignore the actual values during state generation, effectively creating a parameterized function that shares one FSM path for all inputs.
@@ -85,6 +90,7 @@ def read_data(engine: EngineProto) -> Union[Renderable, int]:
 ```
 
 ### Dynamic Slot Widths
+
 Slot widths can be configured flexibly to match your design needs:
 
 * **Fixed Width:** `@Segment.with_input_slots(data=8)` uses a constant bit-width.
@@ -93,6 +99,7 @@ Slot widths can be configured flexibly to match your design needs:
 * **Disabled:** `@Segment.with_input_slots(data=False)` or omitting the slot entirely disables slot creation.
 
 ## Input Checks
+
 To ensure hardware safety and catch configuration errors early, you can validate arguments before a segment is instantiated or called using `with_input_checks`. This is particularly useful when combined with input slots, as the actual function body won't be executed for every different input.
 
 ```python

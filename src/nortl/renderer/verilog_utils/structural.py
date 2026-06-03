@@ -355,3 +355,27 @@ class VerilogModule:
             if item.name == name:
                 return item
         raise RuntimeError(f'Could not find an instance named {name}.')
+
+
+class GuardBlock:
+    """Represents a guard block around a Verilog element.
+
+    This can be used to e.g. hide blocks of Verilog code for synthesis.
+    """
+
+    def __init__(self, start: str, stop: str, content: VerilogRenderable) -> None:
+        """Initialize a guard block.
+
+        Arguments:
+            start: Opening marker, e.g. "`idef PR".
+            stop: Closing marker, e.g. "`endif".
+            content: Content of the guard block.
+        """
+        self.start = start
+        self.stop = stop
+        self.content = content
+
+    def render(self) -> str:
+        """Render the block."""
+        content = [self.start, self.content.render(), self.stop]
+        return '\n'.join(content)

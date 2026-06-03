@@ -1,7 +1,7 @@
 """Describes engine states as Python object."""
 
 from abc import ABCMeta, abstractmethod
-from typing import Dict, Final, Iterable, Iterator, List, Literal, Mapping, Optional, Sequence, Set, Tuple, Union
+from typing import Dict, Final, Iterable, Iterator, List, Literal, Mapping, Optional, Sequence, Set, Tuple, Union, overload
 
 from typing_extensions import Self
 
@@ -9,7 +9,7 @@ from nortl.core.exceptions import ConflictingAssignmentError, ForbiddenAssignmen
 from nortl.core.operations import All, Any, to_renderable
 
 from .common import NamedEntity
-from .protocols import AssignmentTarget, EngineProto, Renderable, RenderableSelector, Selector, StateProto, WorkerProto
+from .protocols import LOG_LEVELS, AssignmentTarget, EngineProto, Renderable, RenderableSelector, Selector, StateProto, WorkerProto
 
 __all__ = [
     'State',
@@ -216,6 +216,22 @@ def selector_to_renderable(selector: Selector) -> RenderableSelector:
 AnyAssignment = Union[Assignment, ConditionalAssignment, SelectorAssignment]
 
 
+class PrintMessage:
+    def __init__(
+        self,
+        condition: Optional[Renderable],
+        message: Union[str, object],
+        args: Sequence[Renderable],
+        handler: Optional[str],
+        kwargs: Mapping[str, object],
+    ) -> None:
+        self.condition = condition
+        self.message = message
+        self.args = args
+        self.handler = handler if handler else 'logger'
+        self.kwargs = kwargs
+
+
 class State(NamedEntity):
     """Representation of an engine state.
 
@@ -250,8 +266,7 @@ class State(NamedEntity):
         self._transitions_locked = False
 
         # Store for debug prints. These will not be rendered to synthesizeable constructs
-        self._prints: List[Tuple[str, Tuple[Renderable, ...]]] = []
-        self._printfs: Dict[str, List[Tuple[str, Tuple[Renderable, ...]]]] = {}
+        self._prints: List[PrintMessage] = []
 
         # Store stack trace at point of creation
         self.engine.tracer.add_metadata(self, 'stack@creation', profile=True)
@@ -448,17 +463,56 @@ class State(NamedEntity):
     def __format__(self, format_spec: str) -> str:
         return self.render()
 
-    def print(self, line: str, *args: Renderable) -> None:
-        """Adds a line to the print list that will be processed during simulation."""
-        self._prints.append((line, args))
+    # Debugging Prints
+    @property
+    def prints(self) -> Sequence[PrintMessage]:
+        """Sequence of messages."""
+        return self._prints
 
-    def printf(self, fname: str, line: str, *args: Renderable) -> None:
-        """Store an item that will be output to a file during simulation."""
-        if fname in self._printfs:
-            self._printfs[fname].append((line, args))
-        else:
-            self._printfs[fname] = [(line, args)]
+    @overload
+    def print(self, message: str, /, *args: Renderable, handler: Optional[Literal['logger']] = 'logger', level: LOG_LEVELS = 'info') -> None: ...
 
+    @overload
+    def print(self, message: Union[str, object], /, *args: Renderable, handler: str = ..., **kwargs: object) -> None: ...
+
+    def print(self, message: Union[str, object], /, *args: Renderable, handler: Optional[str] = None, **kwargs: object) -> None:
+        """Add a message print during simulation.
+
+        Arguments:
+            message: The string message. It may contain Verilog format specifiers (`%d`, `%s` etc.) for `$sformatf()`.
+                If this is the case, they must be provided as positional arguments.
+                If a custom handler is used, the message may also be any Python object (interpretation is up to the handler).
+            args: Values for format specifiers in the message.
+            handler: Optional print handler. If no handler is provided, the default logger is used. Alternative handlers are e.g. used to emit coverage records.
+            kwargs: Arguments for the print handler. The specific arguments depend on the handler.
+                For the default print handler, the log level can be provided.
+        """
+        self._prints.append(PrintMessage(None, message, args, handler, kwargs))
+
+    @overload
+    def print_if(
+        self, condition: Renderable, message: str, /, *args: Renderable, handler: Optional[Literal['logger']] = 'logger', level: LOG_LEVELS = 'info'
+    ) -> None: ...
+    @overload
+    def print_if(self, condition: Renderable, message: Union[str, object], /, *args: Renderable, handler: str = ..., **kwargs: object) -> None: ...
+
+    def print_if(
+        self, condition: Renderable, message: Union[str, object], /, *args: Renderable, handler: Optional[str] = None, **kwargs: object
+    ) -> None:
+        """Add a conditional message print during simulation.
+
+        Arguments:
+            condition: Condition for message.
+            message: The string message. It may contain Verilog format specifiers (`%d`, `%s` etc.) for `$sformatf()`.
+                If this is the case, they must be provided as positional arguments.
+                If a custom handler is used, the message may also be any Python object (interpretation is up to the handler).
+            args: Values for format specifiers in the message.
+            handler: Optional print handler. If no handler is provided, the default logger is used. Alternative handlers are e.g. used to emit coverage records.
+            kwargs: Arguments for the print handler. The specific arguments depend on the handler. For the default logger, the level can be provided.
+        """
+        self._prints.append(PrintMessage(condition, message, args, handler, kwargs))
+
+    # Signature for optimization
     @property
     def signature(self) -> str:
         """Create a string that comprises all assignments and transitions.

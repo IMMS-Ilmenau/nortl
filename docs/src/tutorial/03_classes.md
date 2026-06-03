@@ -3,6 +3,7 @@
 As your hardware designs grow in complexity, keeping all state transitions, signal definitions, and timing logic in a single script quickly becomes unmanageable. noRTL embraces Python's native object-oriented features, allowing you to structure your designs into modular, reusable components without sacrificing the sequential, hardware-like feel of your code.
 
 ## Inheriting from the Engine class
+
 While you don't *need* to inherit from `Engine` to use noRTL, doing so can be useful when you want to create custom engine variants with predefined initialization logic, default parameters, or custom rendering hooks.
 
 ```python
@@ -21,6 +22,7 @@ class CustomEngine(Engine):
 In most cases, however, **composition** is preferred over inheritance. Creating separate classes that manage specific subsystems and passing the `Engine` instance to them keeps your code flexible and easier to test.
 
 ## Encapsulate your glue logic in functions and classes
+
 noRTL's context managers and state transitions are tied to the active `Engine` instance. This means you can safely encapsulate hardware logic inside Python functions or classes. As long as you pass the `engine` reference, the underlying state machine will correctly stitch everything together.
 
 For example, let's encapsulate the heater control logic from our coffee machine into a reusable class:
@@ -55,12 +57,12 @@ with engine.while_loop(Const(True)):
     # ... rest of the logic ...
 ```
 
-
 !!! note
+
     Please take care that there are no naming collisions in the verilog signal names when you create local signals inside your classes. This can be circumvented by appending e.g. unique numbers or prefixes to your verilog signal names -- or using scratch variables.
 
-
 ## Structural Idea
+
 When organizing larger designs, think of your `Engine` as the top-level module and your Python classes as IP blocks or subsystem controllers. A typical structure looks like this:
 
 1. **Interface Definition:** Define all ports and top-level signals in the main script.
@@ -71,6 +73,7 @@ When organizing larger designs, think of your `Engine` as the top-level module a
 This approach mirrors standard hardware design practices: you design, verify, and reuse blocks, then integrate them into a cohesive system.
 
 ## Re-Use of functions using classes
+
 To make your designs truly reusable, parameterize your classes. This is especially useful when you need to instantiate multiple identical hardware blocks with different configurations.
 
 ```python

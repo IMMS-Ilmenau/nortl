@@ -17,6 +17,7 @@ from typing import (
     Tuple,
     TypeVar,
     Union,
+    overload,
 )
 
 from typing_extensions import Self
@@ -52,6 +53,9 @@ SIGNAL_ACCESS_CHECKS = Literal['exclusive_read', 'exclusive_write', 'identical_r
 ACCESS_CHECKS = SIGNAL_ACCESS_CHECKS
 
 T_Signal = TypeVar('T_Signal', 'SignalProto', 'SignalSliceProto', covariant=True)
+
+# Log levels
+LOG_LEVELS = Literal['info', 'warning', 'error']
 
 
 class NamedEntityProto(Protocol):
@@ -255,10 +259,15 @@ class SelectorAssignmentProto(Protocol):
     def flatten_cases(self) -> Sequence[Tuple[Renderable, Renderable]]: ...
 
 
-class StateProto(NamedEntityProto, Protocol):
-    _prints: List[Tuple[str, Tuple[Renderable, ...]]]
-    _printfs: Dict[str, List[Tuple[str, Tuple[Renderable, ...]]]]
+class PrintMessageProto[T](Protocol):
+    condition: Optional[Renderable]
+    message: T
+    args: Sequence[Renderable]
+    handler: str
+    kwargs: Mapping[str, object]
 
+
+class StateProto(NamedEntityProto, Protocol):
     active_scratch_signals: List['ScratchSignalProto']
 
     @property
@@ -290,12 +299,28 @@ class StateProto(NamedEntityProto, Protocol):
 
     def _lock_transitions(self) -> None: ...
 
+    # Debugging Prints
+    @property
+    def prints(self) -> Sequence[PrintMessageProto[object]]: ...
+
+    @overload
+    def print(self, message: str, /, *args: Renderable, handler: Optional[Literal['logger']] = ..., level: LOG_LEVELS = ...) -> None: ...
+    @overload
+    def print(self, message: Union[str, object], /, *args: Renderable, handler: str = ..., **kwargs: object) -> None: ...
+    def print(self, message: Union[str, object], /, *args: Renderable, handler: Optional[str] = None, **kwargs: object) -> None: ...
+
+    @overload
+    def print_if(
+        self, condition: Renderable, message: str, /, *args: Renderable, handler: Optional[Literal['logger']] = ..., level: LOG_LEVELS = ...
+    ) -> None: ...
+    @overload
+    def print_if(self, condition: Renderable, message: Union[str, object], /, *args: Renderable, handler: str = ..., **kwargs: object) -> None: ...
+    def print_if(
+        self, condition: Renderable, message: Union[str, object], /, *args: Renderable, handler: Optional[str] = None, **kwargs: object
+    ) -> None: ...
+
     # Misc.
     def render(self, target: Optional[str] = None) -> str: ...
-
-    def print(self, line: str, *args: Renderable) -> None: ...
-
-    def printf(self, fname: str, line: str, *args: Renderable) -> None: ...
 
     @property
     def signature(self) -> str: ...
@@ -442,6 +467,10 @@ class EngineProto(_StateManager, Protocol):
     @property
     def tracer(self) -> 'TracerProto': ...
 
+    # Coverage
+    @property
+    def coverage(self) -> 'CoverageManagerProto': ...
+
     # State manegement (+_StateManager)
     @property
     def states(self) -> Mapping[str, Sequence[StateProto]]: ...
@@ -528,10 +557,21 @@ class EngineProto(_StateManager, Protocol):
     ) -> None: ...
 
     # Debugging Prints
+    @overload
+    def print(self, message: str, /, *args: Renderable, handler: Optional[Literal['logger']] = ..., level: LOG_LEVELS = ...) -> None: ...
+    @overload
+    def print(self, message: Union[str, object], /, *args: Renderable, handler: str = ..., **kwargs: object) -> None: ...
+    def print(self, message: Union[str, object], /, *args: Renderable, handler: Optional[str] = None, **kwargs: object) -> None: ...
 
-    def print(self, line: str, *args: Renderable) -> None: ...
-
-    def printf(self, fname: str, line: str, *args: Renderable) -> None: ...
+    @overload
+    def print_if(
+        self, condition: Renderable, message: str, /, *args: Renderable, handler: Optional[Literal['logger']] = ..., level: LOG_LEVELS = ...
+    ) -> None: ...
+    @overload
+    def print_if(self, condition: Renderable, message: Union[str, object], /, *args: Renderable, handler: str = ..., **kwargs: object) -> None: ...
+    def print_if(
+        self, condition: Renderable, message: Union[str, object], /, *args: Renderable, handler: Optional[str] = None, **kwargs: object
+    ) -> None: ...
 
     # Module Managment
     @property
@@ -807,3 +847,84 @@ class TracerProto(Protocol):
 
     @property
     def current_trace(self) -> Sequence[FrameInfo]: ...
+
+
+# Coverage
+class CoverageManagerProto(Protocol):
+    engine: EngineProto
+
+    @property
+    def enabled(self) -> bool: ...
+
+    @property
+    def states(self) -> Mapping[str, StateProto]: ...
+
+    # Cover points
+    @property
+    def coverpoints(self) -> Mapping[str, 'CoverPointProto']: ...
+
+    @property
+    def covergroups(self) -> Mapping[str, 'CoverGroupProto']: ...
+
+    # Back annotation
+    def back_annotate_coverpoint(
+        self,
+        name: str,
+        state: StateProto,
+        condition: Union[Renderable, str],
+        group: Optional['CoverGroupProto'] = ...,
+        group_coords: Optional[Sequence[int]] = ...,
+    ) -> None: ...
+
+    def back_annotate_covergroup(self, name: str, axis: Sequence[Union[Renderable, str]], limits: Sequence[Tuple[int, int]]) -> None: ...
+
+    # Coverage monitoring
+    def monitor_state_coverage(self) -> None: ...
+
+    def monitor_transition_coverage(self) -> None: ...
+
+    def coverpoint(
+        self, condition: Renderable, point_name: Optional[str] = None, group_name: Optional[str] = None, group_coords: Optional[List[int]] = None
+    ) -> str: ...
+
+    def covergroup(self, name: str, target: List[Tuple[Renderable, int, int]]) -> None: ...
+
+    # Statistics
+    @property
+    def state_coverage(self) -> 'CoverageStatisticsProto': ...
+
+    @property
+    def transition_coverage(self) -> 'CoverageStatisticsProto': ...
+
+
+class CoverPointProto(Protocol):
+    name: str
+    state: StateProto
+    condition: str
+    group: Optional['CoverGroupProto']
+    group_coords: Optional[Sequence[int]]
+
+    @property
+    def covered(self) -> bool: ...
+
+
+class CoverGroupProto(Protocol):
+    name: str
+    axis: Sequence[str]
+    limits: Sequence[Tuple[int, int]]
+
+    @property
+    def coverpoints(self) -> Mapping[str, CoverPointProto]: ...
+
+    def register_coverpoint(self, coverpoint: CoverPointProto) -> None: ...
+
+    @property
+    def coverage(self) -> 'CoverageStatisticsProto': ...
+
+
+class CoverageStatisticsProto(Protocol):
+    name: str
+    covered: int
+    total: int
+    uncovered: int
+    percentage: float

@@ -3,7 +3,7 @@
 from typing import Iterator, Optional
 
 from nortl.core.exceptions import read_access
-from nortl.core.modifiers import BaseModifier
+from nortl.core.modifiers import unwrap_modifiers
 from nortl.core.operations import BaseOperation
 from nortl.core.protocols import AnySignal, AssignmentTarget, EngineProto, Renderable
 from nortl.core.signal import ScratchSignal, Signal, SignalSlice
@@ -58,16 +58,13 @@ class FastForwarder:
                     self.needs_sync = True
                     return None
 
+                value, modifiers = unwrap_modifiers(value, preserve=True)
+
                 # If an assignment is found, the behavior depends on the type of the input value
-                if isinstance(value, BaseModifier):
-                    value = value.content
                 if isinstance(value, (Signal, SignalSlice, ScratchSignal)):
                     # If the input value is a signal, its possible to copy the value directly into the input slot
                     # Any modifier is preserved
-                    if isinstance(value, BaseModifier):
-                        fast_forward_value = value.copy(assignment.value)
-                    else:
-                        fast_forward_value = assignment.value  # type: ignore[assignment]
+                    fast_forward_value = modifiers.apply(assignment.value)  # type: ignore[assignment]
                 else:
                     # Signals used in operations are also too complicated to fast-forward
                     self.needs_sync = True
@@ -107,9 +104,8 @@ class FastForwarder:
     @classmethod
     def extract_all_signals(cls, renderable: Renderable) -> Iterator[AnySignal]:
         """Extract all signals from a renderable."""
-        # Unpack modifiers
-        if isinstance(renderable, BaseModifier):
-            renderable = renderable.content
+        # Unwrap modifiers
+        renderable = unwrap_modifiers(renderable)
 
         if isinstance(renderable, BaseOperation):
             for operand in renderable.operands:

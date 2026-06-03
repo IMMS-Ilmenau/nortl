@@ -43,10 +43,6 @@ from .utils import VerilogRenderable, to_verilog_renderable
 class VerilogAssignment:
     """Represents a Verilog assignment.
 
-    Args:
-        tgt: The target signal or expression.
-        src: The source signal or expression.
-
     Example:
         >>> assignment = VerilogAssignment("count", "count + 1")
         >>> print(assignment.render())
@@ -134,10 +130,6 @@ class VerilogBlock:
 
 class VerilogCase:
     """Represents a Verilog case statement.
-
-    Args:
-        tgt_signal: The signal to switch on.
-        case_type: The case type ('unique', 'priority', or empty for regular case).
 
     Example:
         >>> case_stmt = VerilogCase("state", "unique")
@@ -246,9 +238,6 @@ class VerilogCase:
 
 class VerilogIf:
     """Represents a Verilog if-else statement.
-
-    Args:
-        condition: The condition for the if statement.
 
     Example:
         >>> if_stmt = VerilogIf("reset")
@@ -376,10 +365,6 @@ class VerilogProcess:
 class AlwaysFF(VerilogProcess):
     """Represents an always_ff block with clock and reset.
 
-    Args:
-        clk: The clock signal.
-        reset: The reset signal.
-
     Example:
         >>> always_ff = AlwaysFF("clk", "reset")
         >>> always_ff.add(VerilogAssignment("state", "next_state"))
@@ -465,9 +450,6 @@ class AlwaysComb(VerilogProcess):
 class AlwaysLatch(VerilogProcess):
     """Represents an always_latch block with latch enable.
 
-    Args:
-        latch_en: The latch enable condition.
-
     Example:
         >>> always_latch = AlwaysLatch("enable")
         >>> always_latch.add(VerilogAssignment("data", "input_data"))
@@ -502,12 +484,29 @@ class AlwaysLatch(VerilogProcess):
         self.behavior.true_branch.add(item)
 
 
+class Initial(VerilogProcess):
+    """Represents an initial block.
+
+    !!! warning
+        Initial blocks are not synthesizable.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.block_label = 'initial'
+        self.render_sensitivity = False
+
+    def add(self, item: VerilogRenderable) -> None:
+        """Add an item to the block.
+
+        Args:
+            item: The item to add.
+        """
+        self._add(item)
+
+
 class VerilogPrint:
     """Represents a Verilog $display statement.
-
-    Args:
-        line: The format string.
-        args: The arguments to display.
 
     Example:
         >>> print_stmt = VerilogPrint("State: %d", "state")
@@ -538,18 +537,13 @@ class VerilogPrint:
 class VerilogPrintf:
     """Represents a Verilog $fdisplay statement for file output.
 
-    Args:
-        fname: The filename.
-        line: The format string.
-        args: The arguments to display.
-
     Example:
         >>> printf_stmt = VerilogPrintf("output.log", "State: %d", "state")
         >>> print(printf_stmt.render())
         begin
             int fd;
             fd = $fopen(output.log, "w+");
-            $fdisplay("State: %d", state);
+            $fdisplay(fd, "State: %d", state);
             $fclose(fd);
         end
     """
@@ -575,9 +569,41 @@ class VerilogPrintf:
         ret = []
         ret.append('begin')
         ret.append('int fd;')
-        ret.append(f'fd = $fopen({self.fname}, "w+");')
-        ret.append(f'$fdisplay("{self.line}", {",".join(self.args)});')
+        ret.append(f'fd = $fopen("{self.fname}", "a");')
+        ret.append(f'$fdisplay(fd, "{self.line}", {",".join(self.args)});')
         ret.append('$fclose(fd);')
         ret.append('end')
 
         return '\n'.join(ret)
+
+
+class VerilogFunctionCall:
+    """Represents a Verilog function call.
+
+    Example:
+        >>> call = VerilogFunctionCall("$fatal", False, 1, "Something went very wrong")
+        >>> print(call.render())
+        $fatal(1, "Something went very wrong");
+    """
+
+    def __init__(self, function: str, nested: bool = False, /, *args: Union[str, VerilogRenderable], **kwargs: Union[str, VerilogRenderable]) -> None:
+        """Initialize the function call.
+
+        Arguments:
+            function: Name of the Verilog function.
+            nested: Indicates if the function is nested. If True, no semicolon is added.
+            args: Positional arguments.
+            kwargs: Keyword arguments.
+            nested: Indicates if the
+        """
+        self.function = function
+        self.nested = nested
+        self.args = args
+        self.kwargs = kwargs
+
+    def render(self) -> str:
+        """Render the function call."""
+        args = [f'{arg}' for arg in self.args]
+        args.extend([f'.{name}({value})' for name, value in self.kwargs.items()])
+
+        return f'{self.function}({", ".join(args)}){";" if not self.nested else ""}'

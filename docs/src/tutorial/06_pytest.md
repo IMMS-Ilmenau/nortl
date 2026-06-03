@@ -1,6 +1,5 @@
 # Testing your Engine with Pytest
 
-
 As your designs grow, manually checking Verilog output is no longer feasible. noRTL provides a built-in testing framework that automates the generation of Verilog, compilation with Icarus Verilog, and simulation using `vvp`. This allows you to write tests that look like standard Python code but actually run on your simulated hardware.
 
 ## The Test Wrapper

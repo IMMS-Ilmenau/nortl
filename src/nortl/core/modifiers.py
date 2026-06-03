@@ -2,7 +2,7 @@
 
 from abc import abstractmethod
 from contextlib import ExitStack
-from typing import Generic, Literal, Never, Optional, Self, Set, TypeVar, Union
+from typing import Generic, List, Literal, Never, Optional, Self, Sequence, Set, Tuple, TypeVar, Union, overload
 
 from nortl.core.exceptions import WriteViolationError
 from nortl.core.operations import OperationTrait
@@ -269,3 +269,46 @@ class WeakReference(Generic[T_PermanentSignal], BaseModifier[T_PermanentSignal])
     def overlaps_with(self, other: AssignmentTarget) -> Union[bool, Literal['partial']]:
         """Check if signal overlaps with other signal or signal slice."""
         return self.content.overlaps_with(other)
+
+
+class ModifierRewrapper[T: Renderable]:
+    """Helper object that can wrap renderables in the same modifiers, that an other renderable was unwrapped from."""
+
+    def __init__(self, modifiers: Sequence[BaseModifier[T]]):
+        """Initialize a new ModifierRewrapper.
+
+        Arguments:
+            modifiers: Modifiers, starting with the outmost modifier.
+        """
+        self.modifiers = modifiers
+
+    def apply(self, renderable: T) -> T:
+        """Apply the modifiers to renderable."""
+        for modifier in reversed(self.modifiers):
+            renderable = modifier.copy(renderable)  # type: ignore[assignment]
+        return renderable
+
+
+@overload
+def unwrap_modifiers[T: Renderable](renderable: T, preserve: Literal[False] = ...) -> T: ...
+@overload
+def unwrap_modifiers[T: Renderable](renderable: T, preserve: Literal[True] = ...) -> Tuple[T, ModifierRewrapper[T]]: ...
+def unwrap_modifiers[T: Renderable](renderable: T, preserve: bool = False) -> Union[T, Tuple[T, ModifierRewrapper[T]]]:
+    """Unwrap a renderable from all modifiers surrounding it.
+
+    This will render the modifiers useless and must only be used for technical reasons, such as type checks or getting access to attributes of the
+    renderable, that are not exposed through the modifier.
+
+    Arguments:
+        renderable: The renderable to unwrap.
+        preserve: If True, returns a rewrapper helper object. This object can be applied to other values to apply the same modifiers.
+    """
+    modifiers: List[BaseModifier[T]] = []
+    while isinstance(renderable, BaseModifier):
+        modifiers.append(renderable)
+        renderable = renderable.content
+
+    if preserve:
+        return renderable, ModifierRewrapper(modifiers)
+    else:
+        return renderable

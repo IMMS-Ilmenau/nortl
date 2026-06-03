@@ -23,6 +23,14 @@ nav:
     - Installation: user_guide/installation.md
     - Engine: user_guide/engine.md
     - Data Model: user_guide/data_model.md
+  - Debugging:
+    - Coverage:
+      - Setup: debugging/coverage/setup.md
+      - Coverage Files: debugging/coverage/coverage_files.md
+      - Coverage Writer: debugging/coverage/coverage_writer.md
+    - Logging:
+      - Setup: debugging/logging/setup.md
+      - Logger: debugging/logging/logger.md
   - Code Reference: reference/
   # TODO Add new sections to the documentation here
 

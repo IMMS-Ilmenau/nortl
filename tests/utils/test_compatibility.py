@@ -1,5 +1,7 @@
 from nortl.core.checker import StaticAccessChecker
 from nortl.core.common import NamedEntity, StaticAccess
+from nortl.core.coverage.coverpoint import CoverGroup, CoverPoint
+from nortl.core.coverage.manager import CoverageManager
 from nortl.core.engine import CoreEngine
 from nortl.core.manager.scratch_manager import ScratchManager
 from nortl.core.manager.signal_manager import SignalManager
@@ -10,6 +12,9 @@ from nortl.core.process import Thread, Worker
 from nortl.core.protocols import (
     AssignmentProto,
     ConditionalAssignmentProto,
+    CoverageManagerProto,
+    CoverGroupProto,
+    CoverPointProto,
     EngineProto,
     ModuleInstanceProto,
     ModuleProto,
@@ -51,5 +56,8 @@ def test_protocol_compatibility() -> None:
     t16: AssignmentProto = Assignment(t6, Const(1))
     t17: ConditionalAssignmentProto = ConditionalAssignment(t6, Const(1), Const(1))
     t18: SelectorAssignmentProto = SelectorAssignment(t6, {t8 == 1: Const(1)})
+    t19: CoverageManagerProto = CoverageManager(t4)
+    t20: CoverGroupProto = CoverGroup(t4, 'test', (), ())
+    t21: CoverPointProto = CoverPoint('test', t5, t6)
 
-    del t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18
+    del t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21

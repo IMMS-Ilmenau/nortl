@@ -83,6 +83,7 @@ This automatic ownership model means you can focus on designing your parallel lo
 While static access checks are crucial for preventing race conditions and ensuring deterministic hardware behavior, there are legitimate cases where you need to relax these rules. For example, when implementing communication channels, shared lookup tables, or control signals that are safely read by multiple threads in a coordinated manner. noRTL provides two primary ways to handle these scenarios:
 
 ## Using the Access Checker
+
 Every signal carries an internal `StaticAccessChecker` that tracks read and write ownership. You can manually override or clear these checks when you are certain that concurrent access is safe. The engine provides a convenient method to free access rights for a specific thread, which is automatically used during `fork` and `join` operations:
 
 ```python
@@ -93,6 +94,7 @@ engine.signal_manager.free_accesses_from_thread(my_thread)
 Alternatively, you can disable checks on a per-signal basis if you are managing complex ownership transfers. This approach gives you explicit control over the lifecycle of access rights but requires careful tracking of thread states to avoid silent race conditions.
 
 ## Using `Volatile`
+
 For signals that are intentionally shared across multiple threads or workers, noRTL provides the `Volatile` wrapper. Wrapping a signal with `Volatile` tells the access checker to relax its strict ownership rules for that specific instance. You can specify the desired access policy during initialization:
 
 ```python

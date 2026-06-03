@@ -3,6 +3,7 @@
 While noRTL provides powerful high-level constructs for sequential design, you will often need to integrate existing or third-party IP cores. noRTL makes this process seamless by allowing you to wrap any Verilog module in a Python class and connect it to your engine's logic. Let's walk through this using a Block RAM as an example.
 
 ## Providing a Verilog Module
+
 First, we need our target hardware description. Here is a simple synchronous Block RAM with a pipeline register for reads and clock-gating support:
 
 ```systemverilog
@@ -43,6 +44,7 @@ endmodule
 ```
 
 ## Adding the Module to NoRTL
+
 Before we can instantiate this module in Python, we need to register it with noRTL's library. This is done in `src/nortl/verilog_library/__init__.py`. We add the file path to the `BUILT_IN_LIB` dictionary and define the module's interface in the `get_modules()` function:
 
 ```python
@@ -80,6 +82,7 @@ def get_modules() -> List[Module]:
     It is recommended that you create your own `get_modules` function in your own package to collect all verilog components you need for your noRTL engine.
 
 ## Wrapping the Module in a Python Class
+
 We create a Python class that handles instantiation, parameter overriding, and port mapping. This class acts as a bridge between your sequential Python code and the synthesized Verilog logic.
 
 ```python
@@ -121,9 +124,11 @@ class BlockRam:
 ```
 
 ## Gluing Logic: Read and Write Operations
+
 Now that our hardware is wrapped, we can control it using noRTL's sequential constructs. The `engine.set()` and `engine.sync()` methods allow us to schedule operations across clock cycles.
 
 ## Single Operation (Scratch Variable)
+
 For standard use cases, a `read` operation will schedule an address, wait for one clock cycle, and return a signal object. This signal acts as a "scratch variable" that you can directly use in subsequent logic, comparisons, or assignments.
 
 ```python
@@ -149,6 +154,7 @@ For standard use cases, a `read` operation will schedule an address, wait for on
 ```
 
 ## Batch Operations
+
 Sometimes you need to transfer multiple values efficiently without breaking your sequential flow. noRTL's context managers and `sync()` calls make it easy to implement burst interfaces that accept lists of addresses or data.
 
 ```python

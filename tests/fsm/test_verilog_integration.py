@@ -252,8 +252,6 @@ def test_output_count_CG(encoding: ENCODINGS) -> None:
     engine = Engine('my_engine')
     _ = engine.define_input('IN')
 
-    engine.current_state.set_metadata('Clock_gating', True)
-
     output = engine.define_output('OUT', 8)
     for i in range(16):
         engine.set(output, i)

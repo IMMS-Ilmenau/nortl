@@ -1,14 +1,15 @@
 """Core Engine."""
 
-from typing import Any, ClassVar, Dict, Mapping, Optional, Sequence, Set, Tuple, Union
+from typing import Any, ClassVar, Dict, Literal, Mapping, Optional, Sequence, Set, Tuple, Union, overload
 
+from nortl.core.coverage.manager import CoverageManager
 from nortl.core.exceptions import OwnershipError, TransitionLockError, UnreachableTransitionError, read_access, write_access
 from nortl.core.manager import ScratchManager, SignalManager
 from nortl.core.module import Module, ModuleInstance
 from nortl.core.operations import Const, to_renderable
 from nortl.core.parameter import Parameter
 from nortl.core.process import Thread, Worker
-from nortl.core.protocols import AssignmentTarget, ModuleProto, PermanentSignal, Renderable, Selector, StateProto, WorkerProto
+from nortl.core.protocols import LOG_LEVELS, AssignmentTarget, ModuleProto, PermanentSignal, Renderable, Selector, StateProto, WorkerProto
 from nortl.core.signal import ScratchSignal, Signal, SignalSlice
 from nortl.core.state import State, selector_to_renderable
 from nortl.core.tracing import Tracer
@@ -49,8 +50,9 @@ class CoreEngine:
         self.module_name = module_name
         self._reset_state_name = reset_state_name
 
-        # Create tracer
+        # Create tracer and coverage manager
         self._tracer = Tracer(self)
+        self._coverage = CoverageManager(self)
 
         # Parameters, signals and scratch signals
         self._parameters: Dict[str, Parameter] = dict()
@@ -75,6 +77,12 @@ class CoreEngine:
     def tracer(self) -> Tracer:
         """Tracer for diagnostic information."""
         return self._tracer
+
+    # Coverage
+    @property
+    def coverage(self) -> CoverageManager:
+        """Coverage manager."""
+        return self._coverage
 
     # State management
     @property
@@ -595,13 +603,67 @@ class CoreEngine:
             self.current_state._lock_transitions()
 
     # Debugging Prints
-    def print(self, line: str, *args: Renderable) -> None:
-        """Adds a line to the print list of the current state that will be processed during simulation."""
-        self.current_state.print(line, *args)
+    @overload
+    def print(self, message: str, /, *args: Renderable, handler: Optional[Literal['logger']] = 'logger', level: LOG_LEVELS = 'info') -> None: ...
 
-    def printf(self, fname: str, line: str, *args: Renderable) -> None:
-        """Store an item that will be output to a file during simulation."""
-        self.current_state.printf(fname, line, *args)
+    @overload
+    def print(self, message: Union[str, object], /, *args: Renderable, handler: str = ..., **kwargs: object) -> None: ...
+
+    def print(self, message: Union[str, object], /, *args: Renderable, handler: Optional[str] = None, **kwargs: object) -> None:
+        """Add a message print during simulation.
+
+        Arguments:
+            message: The string message. It may contain Verilog format specifiers (`%d`, `%s` etc.) for `$sformatf()`.
+                If this is the case, they must be provided as positional arguments.
+                If a custom handler is used, the message may also be any Python object (interpretation is up to the handler).
+            args: Values for format specifiers in the message.
+            handler: Optional print handler. If no handler is provided, the default logger is used. Alternative handlers are e.g. used to emit coverage records.
+            kwargs: Arguments for the print handler. The specific arguments depend on the handler.
+                For the default print handler, the log level can be provided.
+
+        Examples:
+            ```python
+            # Print an information
+            engine.print("Writing address %0h", reg_address)
+
+            # Print an error
+            engine.print("CRC mismatch: received %0h, expected %0d", incoming_crc, own_crc, level="error")
+            ```
+        """
+        self.current_state.print(message, *args, handler=handler, **kwargs)  # type: ignore[arg-type]
+
+    @overload
+    def print_if(
+        self, condition: Renderable, message: str, /, *args: Renderable, handler: Optional[Literal['logger']] = 'logger', level: LOG_LEVELS = 'info'
+    ) -> None: ...
+    @overload
+    def print_if(self, condition: Renderable, message: Union[str, object], /, *args: Renderable, handler: str = ..., **kwargs: object) -> None: ...
+
+    def print_if(
+        self, condition: Renderable, message: Union[str, object], /, *args: Renderable, handler: Optional[str] = None, **kwargs: object
+    ) -> None:
+        """Add a conditional message print during simulation.
+
+        Arguments:
+            condition: Condition for message.
+            message: The string message. It may contain Verilog format specifiers (`%d`, `%s` etc.) for `$sformatf()`.
+                If this is the case, they must be provided as positional arguments.
+                If a custom handler is used, the message may also be any Python object (interpretation is up to the handler).
+            args: Values for format specifiers in the message.
+            handler: Optional print handler. If no handler is provided, the default logger is used. Alternative handlers are e.g. used to emit coverage records.
+            kwargs: Arguments for the print handler. The specific arguments depend on the handler. For the default logger, the level can be provided.
+
+        Examples:
+            ```python
+            # Print different messages, based on different signals
+            engine.print_if(reg_address < 128, "Performing unpaged write to address %0d", reg_address)
+            engine.print_if(reg_address >= 128, "Performing paged write to address %0d + offset %0d", reg_address, page_address)
+
+            # Only print an error in unexpected situations
+            engine.print_if(hsize > 0 and address % 2 != 0, "Unaligned AHB access to address %0d, hsize %0d", address, hsize, level="error")
+            ```
+        """
+        self.current_state.print_if(condition, message, *args, handler=handler, **kwargs)  # type: ignore[arg-type]
 
     # Module definition
     @property

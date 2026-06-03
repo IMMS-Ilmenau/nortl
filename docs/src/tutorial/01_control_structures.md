@@ -1,4 +1,5 @@
 # Control structures, Signals and the Scratch pad
+
 In this chapter, we dive a little bit deeper into noRTLs feature set. noRTL encapsulates a lot of the complexity that is often needed to implement a digital circuit and map it to conventional programming concepts (or tries to make it look like these concepts).
 
 ## If-Then-Else
@@ -58,6 +59,7 @@ Key features of the `for_loop` construct:
 Internally, noRTL automatically allocates a scratch register for the counter and handles the state machine transitions required to evaluate the loop condition, execute the body, and update the counter. If you need multiple independent loops, noRTL's scratch manager ensures their counters are allocated safely without collisions.
 
 !!! note
+
     Avoid modifying the loop counter variable inside the loop body. Changing the counter manually can lead to unpredictable state transitions and break the intended hardware behavior. Let the engine handle the counter updates automatically.
 
 ## While Loop

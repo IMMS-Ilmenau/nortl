@@ -1,11 +1,12 @@
+// noRTL testbench for Icarus Verilog
+
 module testbench();
 
 logic CLK, RST;
 
 initial begin
     CLK = 0;
-    while(1)
-    begin
+    while (1) begin
         #(10);
         CLK = ~CLK;
     end

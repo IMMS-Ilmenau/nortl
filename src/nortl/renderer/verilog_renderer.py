@@ -1,14 +1,21 @@
-from typing import Dict, Iterable, List, Union
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 from nortl.core.protocols import ConditionalAssignmentProto, EngineProto, SelectorAssignmentProto
+from nortl.renderer.verilog_utils.print_handlers import CoverageWriter, Logger, PrintHandlerProto
 from nortl.renderer.verilog_utils.utils import VerilogRenderable
 
 from .verilog_utils import ENCODINGS, create_state_var
 from .verilog_utils.abstractions import MultiHotEncodedStateRegister, OneHotEncodedStateRegister, StateRegister
-from .verilog_utils.process import AlwaysComb, AlwaysFF, VerilogAssignment, VerilogCase, VerilogIf, VerilogPrint, VerilogPrintf
-from .verilog_utils.structural import VerilogDeclaration, VerilogModule, VerilogPortDeclaration
+from .verilog_utils.process import AlwaysComb, AlwaysFF, VerilogAssignment, VerilogCase, VerilogIf
+from .verilog_utils.structural import GuardBlock, VerilogDeclaration, VerilogModule, VerilogPortDeclaration
 
 # FIXME: Make empty blocks being not rendered at all.
+
+DEFAULT_SYNTHESIS_GUARD = (
+    '// synthesis translate_off',
+    '// synthesis translate_on',
+)
+"""Default synthesis guard. """
 
 
 class VerilogRenderer:
@@ -24,6 +31,7 @@ class VerilogRenderer:
         clock_gating: bool = False,
         encoding: ENCODINGS = 'binary',
         support_unique_if: bool = False,
+        synthesis_guard: Optional[Tuple[str, str]] = DEFAULT_SYNTHESIS_GUARD,
     ):
         """Initializes the VerilogRenderer with the engine data and rendering options.
 
@@ -33,6 +41,9 @@ class VerilogRenderer:
             clock_gating: A boolean indicating whether to enable clock gating logic in the generated Verilog code. Defaults to False.
             encoding: Encoding to use for the state registers
             support_unique_if: If enabled, will render `unique if` and `priority if` statements. This is not supported by all simulators.
+            synthesis_guard: Tuple of opening and closing line for synthesis guard block.
+                Unsynthesizable code, such as print statements, will be wrapped in a guard block. If `synthesis_guard` is None,
+                the code will not be guarded.
         """
         self.engine = engine
         self.verilog_module = VerilogModule(self.engine.module_name)
@@ -43,6 +54,13 @@ class VerilogRenderer:
         self.clock_gating = clock_gating
         self.encoding = encoding
         self.support_unique_if = support_unique_if
+        self.synthesis_guard = synthesis_guard
+
+        # Print handlers
+        self.print_handlers: Dict[str, PrintHandlerProto] = {
+            'logger': Logger(self),
+            'coverage_writer': CoverageWriter(self),
+        }
 
         self.clk_request_signals: List[str] = []
 
@@ -124,9 +142,11 @@ class VerilogRenderer:
                 verilog_inst = self.verilog_module.get_instance(name)
                 verilog_inst.add_connection('CLK_I', 'GCLK')
 
-        # Output and print blocks use the XOR-gated output clock
+        # FIXME use per worker transition blocks
+        self.print_function_blocks['_shared'].clk = 'GCLK'
+
+        # Output uses the XOR-gated output clock
         self.output_function_blocks['_shared'].clk = 'GCLK_output'
-        self.print_function_blocks['_shared'].clk = 'GCLK_output'
 
         # Per-worker state transition blocks use their own gated clock
         for worker_name, blk in self.state_transition_blocks.items():
@@ -403,20 +423,20 @@ class VerilogRenderer:
         output_func = AlwaysFF('CLK_I', 'RST_ASYNC_I')
 
         for worker in self.engine.workers.values():
-            self.state_regs[worker.name].new_case('next state')
-
+            self.state_regs[worker.name].new_case('current state')
             for state in worker.states:
-                for fname, item in state._printfs.items():
-                    for line, val in item:
-                        self.state_regs[worker.name].add_case(state.name, VerilogPrintf(fname, line, *[v.render() for v in val]))
-
-                for line, val in state._prints:
-                    self.state_regs[worker.name].add_case(state.name, VerilogPrint(line, *[v.render() for v in val]))
+                for print_message in state.prints:
+                    self.state_regs[worker.name].add_case(state.name, self.print_handlers[print_message.handler].render(print_message))
 
             output_func.add(self.state_regs[worker.name].build_case())
 
         self.print_function_blocks['_shared'] = output_func
-        self.verilog_module.functionals.append(output_func)
+
+        # Wrap print process in synthesis guard
+        if self.synthesis_guard is not None:
+            self.verilog_module.functionals.append(GuardBlock(*self.synthesis_guard, output_func))
+        else:
+            self.verilog_module.functionals.append(output_func)
 
     def create_combinationals(self) -> None:
         """Creates the Verilog combinational logic.

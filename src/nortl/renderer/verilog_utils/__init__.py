@@ -28,9 +28,10 @@ from typing import Literal, Union, overload
 from nortl.core.protocols import WorkerProto
 
 from .abstractions import MultiHotEncodedStateRegister, OneHotEncodedStateRegister, StateRegister
-from .structural import VerilogDeclaration, VerilogModule
+from .structural import GuardBlock, VerilogDeclaration, VerilogModule
 
 __all__ = [
+    'GuardBlock',
     'MultiHotEncodedStateRegister',
     'OneHotEncodedStateRegister',
     'StateRegister',

@@ -87,3 +87,17 @@ class TestTheTestWrapperWithTimeoutReset(NoRTLTestBase[CoreEngine]):
 
     def verify_final_state(self, engine: CoreEngine) -> None:
         self.finish_simulation()
+
+
+class TestTheTestWrapperInputsShoulbeBeWriteable(NoRTLTestBase[CoreEngine]):
+    def init_sequence(self) -> Engine:
+        f = Engine('my_engine')
+        f.define_input('testreg', 4)
+        return f
+
+    def dut(self, engine: CoreEngine) -> None:
+        engine.set(engine.signals['testreg'], 5)
+        engine.sync()
+
+    def verify_final_state(self, engine: CoreEngine) -> None:
+        self.assertTrue(engine.signals['testreg'] == 5)

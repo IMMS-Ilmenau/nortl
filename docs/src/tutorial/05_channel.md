@@ -39,4 +39,5 @@ engine.set(out, item)
 ```
 
 !!! warning
+
     Both channel types are **blocking** by design. `send()` and `receive()` will advance the state machine and wait until the handshake completes. If you need non-blocking behavior, you'll need to implement conditional checks (`engine.wait_for()`) around the channel calls or build a custom state machine that polls the channel status.

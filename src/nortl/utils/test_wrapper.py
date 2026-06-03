@@ -5,6 +5,7 @@ from inspect import currentframe, getframeinfo
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import FrameType
+from typing import Union
 
 import pytest
 
@@ -14,6 +15,12 @@ from nortl.core.modifiers import UnregisteredRead
 from nortl.core.operations import Var, to_renderable
 from nortl.core.protocols import EngineProto, Renderable
 from nortl.renderer.verilog_renderer import VerilogRenderer
+from nortl.renderer.verilog_utils.print_handlers import CoverageWriter
+from nortl.verilog_library import HDL_MODULES, SIM_MODULES
+
+__all__ = [
+    'NoRTLTestBase',
+]
 
 
 class NoRTLTestBase[T: EngineProto](ABC):
@@ -86,6 +93,9 @@ class NoRTLTestBase[T: EngineProto](ABC):
     def callback_before_rendering(self, engine: T) -> T:
         return engine
 
+    def callback_after_execution(self, engine: T) -> None:
+        pass
+
     def get_test_engine(self) -> T:
         self.engine = self.init_sequence()
 
@@ -95,6 +105,12 @@ class NoRTLTestBase[T: EngineProto](ABC):
         self.timeout = self.engine.define_output('timeout', 1, 0)
         ctr = self.engine.define_local('timeout_ctr', 16, 0)
         self._reset_timeout = Volatile(self.engine.define_local('reset_timeout', 1, 0))
+
+        # The test threads should be able to write on inputs. This is why we convert them to local signals
+        # FIXME check if this can be replaced with a cleaner solution
+        for signal in self.engine.signals.values():
+            if signal.type == 'input':
+                signal._type = 'local'  # type: ignore[attr-defined]
 
         self.engine.sync()
 
@@ -172,7 +188,7 @@ class NoRTLTestBase[T: EngineProto](ABC):
         code_context = fi.code_context[0]
         code_context = re.sub('#.*', '', code_context)
         code_context = code_context.lstrip().rstrip()
-        self.engine.print(f'Assertion \\"{code_context}\\" failed at {fi.filename}:{frame.f_lineno}')
+        self.engine.print(f'Assertion \\"{code_context}\\" failed at {fi.filename}:{frame.f_lineno}', level='error')
 
     def reset_timeout(self) -> None:
         self.engine.set(self._reset_timeout, 1)
@@ -250,33 +266,26 @@ class NoRTLTestBase[T: EngineProto](ABC):
 
         The method raises pytest.fail if the simulation fails.
         """
-        # Create engine from derived class
+        # Create engine from derived class and force name to match instantiation in testbench
         self.engine = self.callback_before_rendering(self.get_test_engine())
+
+        if self.engine.module_name != 'my_engine':
+            raise RuntimeError("Engine for test wrapper must be named 'my_engine'!")
 
         with TemporaryDirectory() as tempdir_str:
             tmp_path = Path(tempdir_str)
 
-            # Generate Verilog files
-            self.verilog_file: Path = tmp_path / 'engine.sv'
-            self.testbench_file: Path = Path(__file__).parent / 'templates' / 'testbench.sv'
+            # Render engine
+            self.verilog_file = self.render(tmp_path, self.engine)
 
-            renderer = VerilogRenderer(self.engine)
-            with open(self.verilog_file, 'w') as fptr:
-                fptr.write(renderer.render())
+            # Collect other source files
+            hdl_lib_files = [str(module.filepath) for module in HDL_MODULES.values()]
+            sim_lib_files = [str(module.filepath) for module in SIM_MODULES.values()]
 
-            # Compile with Icarus Verilog
-            self.compiled_file: Path = tmp_path / 'engine.vvp'
-            compile_result = subprocess.run(
-                ['iverilog', '-g2005-sv', '-o', str(self.compiled_file), str(self.verilog_file), str(self.testbench_file)],
-                capture_output=True,
-                text=True,
-            )
+            # Compile and run simulation
+            self.compiled_file = self.compile(tmp_path, self.verilog_file, *hdl_lib_files, *sim_lib_files)
+            self.simulation_result = self.run(self.compiled_file)
 
-            if compile_result.returncode != 0:
-                pytest.fail(f'Verilog compilation failed:\n{compile_result.stderr}')
-
-            # Run simulation automatically
-            self._run_simulation()
             self.simulation_output: str = self.simulation_result.stdout
 
             res = re.findall(r'passed=\s*\d+', self.simulation_output)[0]
@@ -288,14 +297,62 @@ class NoRTLTestBase[T: EngineProto](ABC):
             if not pass_state:
                 pytest.fail('Verilog simulation discovered errors')
 
-    def _run_simulation(self) -> None:
-        """Executes the compiled Verilog simulation.
+            # Save path to coverage file
+            self.coverage_file = tmp_path / (self.engine.module_name + '.coverage.jsonl')
 
-        This internal method runs the simulation using the vvp simulator.
+            self.callback_after_execution(self.engine)
 
-        Arguments:
-            None
-        """
-        cmd = ['vvp', str(self.compiled_file)]
+    def render(self, working_dir: Path, engine: T) -> Path:
+        """Render engine."""
+        verilog_file: Path = working_dir / (engine.module_name + '.sv')
 
-        self.simulation_result = subprocess.run(cmd, capture_output=True, text=True)
+        # Switch coverage writer to raw mode
+        # Icarus Verilog does not support normal mode
+        CoverageWriter.RAW_MODE = True
+
+        renderer = VerilogRenderer(engine, include_modules=False, synthesis_guard=None)
+
+        with open(verilog_file, 'w') as fptr:
+            fptr.write(renderer.render())
+        return verilog_file
+
+    def create_command_file(self, working_dir: Path, *source_files: Union[Path, str]) -> str:
+        """Create command file for Icarus Verilog."""
+        testbench_file: Path = Path(__file__).parent / 'templates' / 'testbench.sv'
+
+        # NOTE: the command file is required, because Icarus doesn't like the string defines on the command line
+
+        lines = [
+            '+define+NORTL_INTEGRATED_TEST',
+            '+define+NORTL_RAW_MODE',
+            '+define+NORTL_COV' if self.engine.coverage.enabled else '',
+            f'+define+NORTL_COV_OUTPUT_DIRECTORY="{working_dir.as_posix()}"',
+            '+define+NORTL_COV_TEST_NAME="pytest"',
+            str(testbench_file),
+            *(str(file) for file in source_files),
+        ]
+
+        return '\n'.join(lines) + '\n'
+
+    def compile(self, working_dir: Path, *source_files: Union[Path, str]) -> Path:
+        """Compile with Icarus Verilog."""
+        command_file: Path = working_dir / 'args.f'
+        compiled_file: Path = working_dir / 'testbench.vvp'
+
+        # Build command file
+        command_file_text = self.create_command_file(working_dir, *source_files)
+        command_file.write_text(command_file_text)
+
+        # Compile
+        args = ['iverilog', '-g2012', '-f', str(command_file), '-o', str(compiled_file)]
+        compile_result = subprocess.run(args, capture_output=True, text=True)
+
+        if compile_result.returncode != 0:
+            pytest.fail(f'Verilog compilation failed:\n{compile_result.stderr}')
+        return compiled_file
+
+    def run(self, compiled_file: Path) -> subprocess.CompletedProcess[str]:
+        """Executes the compiled Verilog simulation."""
+        cmd = ['vvp', str(compiled_file)]
+
+        return subprocess.run(cmd, capture_output=True, text=True)

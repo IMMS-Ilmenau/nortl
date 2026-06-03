@@ -1,6 +1,6 @@
 [project]
 name = "nortl"
-version = "1.5.8"
+version = "1.6a1"
 description = "Not-only RTL."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -13,6 +13,7 @@ dependencies = [
     "networkx>=3.6.1",
     "more-itertools>=10.8.0",
     "typing-extensions>=4.15.0",
+    "pydantic>=2.12.0",
 ]
 
 [project.optional-dependencies]

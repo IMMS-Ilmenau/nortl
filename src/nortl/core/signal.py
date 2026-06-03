@@ -11,7 +11,7 @@ from typing_extensions import Self
 from nortl.core.checker import StaticAccessChecker
 from nortl.core.common import NamedEntity, StaticAccess
 from nortl.core.exceptions import AccessAfterReleaseError, WriteViolationError
-from nortl.core.modifiers import BaseModifier
+from nortl.core.modifiers import unwrap_modifiers
 from nortl.core.operations import OperationTrait
 from nortl.core.protocols import (
     ACCESS_CHECKS,
@@ -626,8 +626,7 @@ class _BaseSlice(_BaseSignal):
             return False
 
         # Unwrap content of modifier
-        if isinstance(other, BaseModifier):
-            other = other.content
+        other = unwrap_modifiers(other)
 
         if isinstance(other, _BaseSlice):
             # Signal slice, check if it overlaps

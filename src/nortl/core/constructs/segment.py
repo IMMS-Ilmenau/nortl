@@ -24,7 +24,7 @@ from typing import (
 )
 
 from nortl.core.constructs.utils import FastForwarder
-from nortl.core.modifiers import BaseModifier, WeakReference
+from nortl.core.modifiers import WeakReference, unwrap_modifiers
 from nortl.core.operations import Const, Var, to_renderable
 from nortl.core.protocols import (
     AnySignal,
@@ -992,8 +992,7 @@ class SegmentImplementation[T: Union[EngineProto, HelperProto], **P, R: Optional
         widths: List[Optional[int]] = []
         for pos, signal in enumerate(results):
             # Unwrap content of modifier
-            if isinstance(signal, BaseModifier):
-                signal = signal.content
+            signal = unwrap_modifiers(signal)
 
             if not isinstance(signal, (Signal, SignalSlice, ScratchSignal)):
                 raise TypeError(

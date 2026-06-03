@@ -261,5 +261,5 @@ class Engine(
         """
         super().__init__(module_name, reset_state_name)
 
-        for module in verilog_library.get_modules():
+        for module in verilog_library.HDL_MODULES.values():
             self.add_module(module)
