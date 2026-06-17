@@ -16,7 +16,7 @@ class Condition:
 
     final_state_key: str = 'Condition.start_state'
 
-    def __init__(self, engine: EngineProto, condition: Renderable):
+    def __init__(self, engine: EngineProto, condition: Renderable, allow_empty_context: bool = False):
         """Initializes the Condition context manager.
 
         The state management is as follows:
@@ -60,9 +60,11 @@ class Condition:
         Arguments:
             engine: The CoreEngine instance.
             condition: A Renderable signal representing the condition to evaluate.
+            allow_empty_context: Allow
         """
         self.engine = engine
         self.condition = condition
+        self.allow_empty_context = allow_empty_context
 
         if self.engine.current_state.has_metadata(self.final_state_key):
             self.start_state = self.engine.current_state.get_metadata(self.final_state_key)
@@ -79,10 +81,13 @@ class Condition:
         try:
             self.engine.jump_if(self.condition, conditional_state)
         except UnreachableTransitionError as e:
-            raise RuntimeError(
-                f'Condition {self.condition} is constantly False.\n'
-                f'This means, that the code wrapped in the {type(self).__name__} context will never be executed.'
-            ) from e
+            if not self.allow_empty_context:
+                raise RuntimeError(
+                    f'Condition {self.condition} is constantly False.\n'
+                    f'This means, that the code wrapped in the {type(self).__name__} context will never be executed.\n'
+                    'You can set the allow_empty_context=True argument to ignore this error. \n'
+                    'Then, the code within the context will be left dangling.'
+                ) from e
 
         self.engine.current_state = conditional_state
 
