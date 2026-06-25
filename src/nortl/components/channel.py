@@ -152,13 +152,37 @@ class ElasticChannel:
         self.read_ptr = Volatile(self.engine.define_local(f'channel_{name}_readctr', ptr_width, 0))
         self.write_ptr = Volatile(self.engine.define_local(f'channel_{name}_writectr', ptr_width, 0))
 
-        self.level = ((Concat('0b0', self.write_ptr) + self.depth) - self.read_ptr) % self.depth
+        self.level = self.engine.define_local(
+            f'channel_{name}_level', ptr_width, value=((Concat('0b0', self.write_ptr) + self.depth) - self.read_ptr) % self.depth
+        )
 
         # Create data store
         self.data: List[Volatile[SignalProto]] = []
         for i in range(depth):
             data_item = Volatile(self.engine.define_local(f'channel_{name}_data_{i}', width, 0))
             self.data.append(data_item)
+
+        # Area optimizations
+
+        # Signal that points to the next value to be read.
+        # This precalculation lifts some load from the FSM by centralizing it to a single assignment
+
+        self._next_rec_data_item: Renderable = Const(0, self.width)
+
+        for i in range(self.depth):
+            self._next_rec_data_item = IfThenElse(self.read_ptr == i, self.data[i], self._next_rec_data_item)
+
+        self._next_rec_data_item = self.engine.define_local(f'channel_{name}_next_data_item', width, value=self._next_rec_data_item)
+
+        # Store the data to be sent in an FF and pre-calculate the values that can be then assigned to the FFs
+
+        self._tx_data = self.engine.define_local(f'channel_{name}_tx_data_item', self.width, 0)
+
+        self._new_data_values: List[Renderable] = []
+
+        for i in range(self.depth):
+            item = IfThenElse(self.write_ptr == i, self._tx_data, self.data[i])
+            self._new_data_values.append(self.engine.define_local(f'channel_{name}_next_data_{i}', width, value=item))
 
     def send(self, data: Renderable | int) -> None:
         """Sends the data over the channel to the target. The execution is blocked until the data has been sent.
@@ -183,10 +207,11 @@ class ElasticChannel:
         else:
             tx_data = to_renderable(data)
 
+        self.engine.set(self._tx_data, tx_data)
         self.engine.wait_for(self.level < (self.depth - 2))
 
         for i in range(self.depth):
-            self.engine.set(self.data[i], IfThenElse(self.write_ptr == i, tx_data, self.data[i]))
+            self.engine.set(self.data[i], self._new_data_values[i])
 
         self.engine.set(self.write_ptr, self.write_ptr + 1)
         self.engine.sync()
@@ -253,12 +278,8 @@ class ElasticChannel:
         target = self.engine.define_scratch(self.width)
         self.engine.wait_for(self.level != 0)
 
-        res: Renderable = Const(0, self.width)
-
-        for i in range(self.depth):
-            res = IfThenElse(self.read_ptr == i, self.data[i], res)
-
-        self.engine.set(target, res)
+        self.engine.set(target, self._next_rec_data_item)
         self.engine.set(self.read_ptr, self.read_ptr + 1)
         self.engine.sync()
+
         return target

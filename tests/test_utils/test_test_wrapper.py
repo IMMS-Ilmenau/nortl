@@ -1,6 +1,7 @@
 from nortl import Engine
 from nortl.core import CoreEngine
 from nortl.core.constructs.loop import WhileLoop
+from nortl.core.module import Module
 from nortl.core.operations import Const
 from nortl.utils.test_wrapper import NoRTLTestBase
 
@@ -101,3 +102,42 @@ class TestTheTestWrapperInputsShoulbeBeWriteable(NoRTLTestBase[CoreEngine]):
 
     def verify_final_state(self, engine: CoreEngine) -> None:
         self.assertTrue(engine.signals['testreg'] == 5)
+
+
+INVERTER_CODE = """
+module inverter (
+    input A,
+    output Q
+);
+
+assign Q = ~A;
+
+endmodule
+"""
+
+
+class TestCustomModule(NoRTLTestBase[CoreEngine]):
+    """Test adding custom Verilog modules."""
+
+    def init_sequence(self) -> Engine:
+        f = Engine('my_engine')
+        inverter_in = f.define_local('inverter_in', reset_value=0)
+        inverter_out = f.define_local('inverter_out')
+
+        inverter = Module('inverter', INVERTER_CODE)
+        inverter.add_port('A')
+        inverter.add_port('Q')
+        inverter._ignore_clk_rst_connection = True
+        f.add_module(inverter)
+        instance = f.create_module_instance('inverter', 'I_INVERTER')
+        instance.connect_port('A', inverter_in)
+        instance.connect_port('Q', inverter_out)
+
+        return f
+
+    def dut(self, engine: CoreEngine) -> None:
+        engine.set(engine.signals['inverter_in'], 1)
+        engine.sync()
+
+    def verify_final_state(self, engine: CoreEngine) -> None:
+        self.assertTrue(engine.signals['inverter_out'] == 0)

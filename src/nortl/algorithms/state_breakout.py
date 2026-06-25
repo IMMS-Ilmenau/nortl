@@ -2,29 +2,13 @@ import copy
 import math
 from typing import Dict, List, Set, Tuple, Union
 
+from nortl.algorithms.utils import preceeding_states
 from nortl.core.constructs import Segment
 from nortl.core.engine import CoreEngine
 from nortl.core.operations import Const, to_renderable
 from nortl.core.protocols import Renderable, Selector, SignalProto, StateProto, WorkerProto
 from nortl.core.state import selector_to_renderable
 from nortl.utils.operand_extraction import extract_operands
-
-
-def preceeding_states(state: StateProto) -> List[StateProto]:
-    """Get all states that have a transition to the given state.
-
-    Arguments:
-        state: The state to find predecessors for.
-
-    Returns:
-        List of states that have a transition to the given state.
-    """
-    preceeding_states: List[StateProto] = []
-    for worker_state in state.worker.states:
-        for _, next_state in worker_state.transitions:
-            if next_state is state:
-                preceeding_states.append(worker_state)
-    return preceeding_states
 
 
 def move_state_to_worker(state: StateProto, new_worker: WorkerProto) -> StateProto:

@@ -282,6 +282,13 @@ class NoRTLTestBase[T: EngineProto](ABC):
             hdl_lib_files = [str(module.filepath) for module in HDL_MODULES.values()]
             sim_lib_files = [str(module.filepath) for module in SIM_MODULES.values()]
 
+            # Add additional custom modules
+            for module_name, module in self.engine.modules.items():
+                if module_name not in HDL_MODULES:
+                    module_path = tmp_path / f'{module_name}.sv'
+                    module_path.write_text(module.hdl_code)
+                    hdl_lib_files.append(str(module_path))
+
             # Compile and run simulation
             self.compiled_file = self.compile(tmp_path, self.verilog_file, *hdl_lib_files, *sim_lib_files)
             self.simulation_result = self.run(self.compiled_file)
