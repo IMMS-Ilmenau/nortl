@@ -123,6 +123,8 @@ class BlockRam:
         self.engine.connect_module_port(self.instance_name, 'RD_DATA_O', self.rd_data)
 ```
 
+For connecting input ports of the Verilog module, it is recommended to use local signals with a reset value to ensure they are defined at startup. Output signals of the IP are local signals *without* reset value and will therefore be treated like wires in Verilog.
+
 ## Gluing Logic: Read and Write Operations
 
 Now that our hardware is wrapped, we can control it using noRTL's sequential constructs. The `engine.set()` and `engine.sync()` methods allow us to schedule operations across clock cycles.

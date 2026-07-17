@@ -99,6 +99,8 @@ class MyEngineTest(NoRTLTestBase[Engine]):
     def verify_final_state(self, engine: Engine) -> None:
         # Verify that testreg matches the expected value
         self.assertTrue(self.testreg == 5)
+        # Alternative: use assertEqual
+        self.assertEqual(self.testreg, 5)
 ```
 
 ## Running the Tests

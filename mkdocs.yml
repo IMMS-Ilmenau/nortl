@@ -18,7 +18,11 @@ nav:
     - Test with Pytest: tutorial/06_pytest.md
     - Verilog Integration: tutorial/07_verilog_integration.md
     - Segments: tutorial/08_segments.md
-    - Segments: tutorial/09_debugging.md
+    - Debugging: tutorial/09_debugging.md
+    - Packaging:
+      - Overview: tutorial/10_packaging/index.md
+      - Engine Implementation: tutorial/10_packaging/01_engine_implementation.md
+      - Testing & Artifacts: tutorial/10_packaging/02_testing_and_artifacts.md
   - User Guide:
     - Installation: user_guide/installation.md
     - Engine: user_guide/engine.md

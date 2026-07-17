@@ -92,3 +92,12 @@ class Counter:
 ```
 
 By keeping classes lightweight and stateless (except for the signals they manage), you avoid complex inheritance hierarchies that can make debugging state transitions difficult. Instead, favor composition: your main `Engine` script acts as the "top-level module", instantiating and connecting various controller classes.
+
+## From Classes to Packages
+
+Once your engine is organized into well-structured classes and functions, the next step is packaging it as a standalone Python library. See [10_packaging.md](10_packaging.md) for a complete guide on:
+
+- Structuring a noRTL engine as a distributable Python package
+- Writing pytest tests using the `NoRTLTestBase` test wrapper
+- Registering custom Verilog IP modules
+- Generating Verilog for synthesis from your packaged engine
