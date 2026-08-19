@@ -10,6 +10,8 @@ In hardware description, every step in your Python code typically maps to a stat
 * **Improve Readability:** Break complex logic into modular, reusable functions that mirror standard software practices.
 * **Manage Memory Efficiently:** Automatically handle temporary signals and memory zones for intermediate calculations using scratch managers.
 
+> **Note:** Reuse applies to calls with the *same* arguments. To share a single state sequence across *different* input values, use [Input Slots](#input-and-output-slots).
+
 ## How to use Segments
 
 You define a segment by decorating a Python function or method with `@Segment`. noRTL analyzes the call signature automatically. The first time a specific signature is called, noRTL executes the function body to generate the corresponding states and transitions. Subsequent calls with the same signature simply jump to the start of that segment and return to the next state after completion.
@@ -19,7 +21,7 @@ You define a segment by decorating a Python function or method with `@Segment`. 
 The most common use case is decorating standalone functions that take the `Engine` (or a helper object) as their first argument.
 
 ```python
-from nortl import Engine, Segment
+from nortl import Engine, Segment, to_renderable
 from nortl.core.protocols import EngineProto
 from nortl.core.operations import Renderable
 
@@ -29,20 +31,25 @@ output = engine.define_output('OUTPUT', width=1)
 @Segment
 def send_byte(engine: EngineProto, data: Union[Renderable, int]) -> None:
     """Transmit a byte over the OUTPUT signal."""
+    data = to_renderable(data)  # int args are not subscriptable — wrap first
     for i in range(8):
         engine.set(output, data[i])
         engine.sync()
 
 # Usage in your main logic:
 with engine.while_loop(True):
-    # First call: generates the states
+    # First call: generates the states for signature data=0x4A
     send_byte(engine, 0x4A)
-    # Second call: re-uses the exact same state sequence
+    # Second call: same signature -> re-uses the exact same state sequence
+    send_byte(engine, 0x4A)
+    # Different argument -> a NEW segment is generated (see Input Slots below
+    # to make different inputs share a single state sequence)
     send_byte(engine, 0x4B)
 ```
 
 * When `send_byte(engine, 0x4A)` is called for the first time, noRTL executes the Python code to generate a unique sequence of states for this signature. It creates an entry state, 8 intermediate states (one for each bit transmission), and an exit state.
-* When `send_byte(engine, 0x4B)` is called subsequently, noRTL recognizes the identical signature. Instead of generating new states, it inserts a transition that jumps directly to the entry state of the existing sequence. Both calls share the exact same underlying hardware logic and state machine path, demonstrating efficient resource reuse.
+* When `send_byte(engine, 0x4A)` is called again, noRTL recognizes the identical signature. Instead of generating new states, it inserts a transition that jumps directly to the entry state of the existing sequence. Both calls share the exact same underlying hardware logic and state machine path, demonstrating efficient resource reuse.
+* A call with a *different* argument (e.g. `send_byte(engine, 0x4B)`) has a different signature, so noRTL generates a new segment for it. To make different inputs share one state sequence, use **Input Slots** (below).
 
 ### Class Methods
 
@@ -56,6 +63,7 @@ class BitStreamSender:
 
     @Segment
     def send_data(self, data: Union[Renderable, int]) -> None:
+        data = to_renderable(data)  # int args are not subscriptable — wrap first
         for i in range(8):
             self.engine.set(self.output, data[i])
             self.engine.sync()
