@@ -1,6 +1,6 @@
 # Testing and Artifacts
 
-Now we verify that the engine works correctly. Following [06_pytest.md](06_pytest.md), we use `NoRTLTestBase` to create tests that compile and simulate the generated Verilog.
+Now we verify that the engine works correctly. Following [../06_pytest.md](../06_pytest.md), we use `NoRTLTestBase` to create tests that compile and simulate the generated Verilog.
 
 ## Writing Simulation Tests
 

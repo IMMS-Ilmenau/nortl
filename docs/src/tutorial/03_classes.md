@@ -95,7 +95,7 @@ By keeping classes lightweight and stateless (except for the signals they manage
 
 ## From Classes to Packages
 
-Once your engine is organized into well-structured classes and functions, the next step is packaging it as a standalone Python library. See [10_packaging.md](10_packaging.md) for a complete guide on:
+Once your engine is organized into well-structured classes and functions, the next step is packaging it as a standalone Python library. See [10_packaging/index.md](10_packaging/index.md) for a complete guide on:
 
 - Structuring a noRTL engine as a distributable Python package
 - Writing pytest tests using the `NoRTLTestBase` test wrapper

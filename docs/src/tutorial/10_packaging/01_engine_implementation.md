@@ -7,7 +7,7 @@ In this way, many constructs can be written in a nice way but it limits the reus
 
 ## The Main Engine Class
 
-The engine class is the heart of your package. It defines the interface (ports) and the behavior (state machine). Following the composition pattern from [03_classes.md](03_classes.md), the engine delegates subsystem logic to separate controller classes rather than implementing everything inline.
+The engine class is the heart of your package. It defines the interface (ports) and the behavior (state machine). Following the composition pattern from [../03_classes.md](../03_classes.md), the engine delegates subsystem logic to separate controller classes rather than implementing everything inline.
 
 ```python
 # src/traffic_light/engine.py
@@ -269,7 +269,7 @@ def get_custom_modules():
     return modules
 ```
 
-This does two things: it tells noRTL where to find `counter.sv` when rendering Verilog, and it gives the renderer the port/parameter metadata it needs to generate correct instantiations. The `get_custom_modules()` function is used by your test wrapper during simulation compilation (see [02_testing_and_artifacts.md](02_testing_and_artifacts.md)).
+This does two things: it tells noRTL where to find `counter.sv` when rendering Verilog, and it gives the renderer the port/parameter metadata it needs to generate correct instantiations. The `get_custom_modules()` function is used by your test wrapper during simulation compilation (see [../02_testing_and_artifacts.md](../02_testing_and_artifacts.md)).
 
 ### Write a Python Wrapper Class
 
