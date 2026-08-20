@@ -9,7 +9,7 @@ from typing import Iterator, Union
 
 from nortl import verilog_library
 from nortl.algorithms import EmptyStateRemovalMixin, ReachabilityAnalysisMixin, StateBreakoutMixin, StateMergerMixin
-from nortl.components import Channel, ElasticChannel, Timer
+from nortl.components import Channel, ElasticChannel, LookupTable, Timer
 from nortl.core import All, Any, Concat, Const, CoreEngine, IfThenElse, Var, Volatile, enable_tracing, to_renderable
 from nortl.core.constructs import Condition, ElseCondition, Fork, ForLoop, Segment, WhileLoop
 from nortl.core.operations import RawText
@@ -25,6 +25,7 @@ __all__ = [
     'CoreEngine',
     'Engine',
     'IfThenElse',
+    'LookupTable',
     'Segment',
     'Var',
     'Volatile',

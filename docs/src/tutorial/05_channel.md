@@ -8,9 +8,7 @@ Passing data between parallel threads is a common requirement. noRTL provides tw
 ## Using a Basic Channel
 
 ```python
-from nortl.components.channel import Channel
-
-data_channel = Channel(engine, width=16, name='sensor_data')
+data_channel = engine.create_channel(width=16, name='sensor_data')
 
 with engine.fork("sensor_reader") as reader:
     # ... read sensor values ...
@@ -24,9 +22,7 @@ engine.set(out, received_val)
 ## Using an Elastic Channel (FIFO)
 
 ```python
-from nortl.components.channel import ElasticChannel
-
-fifo_channel = ElasticChannel(engine, width=16, name='fifo_data', depth=8)
+fifo_channel = engine.create_elastic_channel(width=16, name='fifo_data', depth=8)
 
 with engine.fork("batch_processor") as batcher:
     # Can push multiple items without waiting for the main thread
