@@ -269,7 +269,7 @@ def get_custom_modules():
     return modules
 ```
 
-This does two things: it tells noRTL where to find `counter.sv` when rendering Verilog, and it gives the renderer the port/parameter metadata it needs to generate correct instantiations. The `get_custom_modules()` function is used by your test wrapper during simulation compilation (see [../02_testing_and_artifacts.md](../02_testing_and_artifacts.md)).
+This does two things: it tells noRTL where to find `counter.sv` when rendering Verilog, and it gives the renderer the port/parameter metadata it needs to generate correct instantiations. The `get_custom_modules()` function is used by your test wrapper during simulation compilation (see [02_testing_and_artifacts.md](02_testing_and_artifacts.md)).
 
 ### Write a Python Wrapper Class
 
