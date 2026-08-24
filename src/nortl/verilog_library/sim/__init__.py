@@ -31,6 +31,10 @@ def load_sim_modules() -> Mapping[str, LibraryModule]:
     coverage_writer = LibraryModule('coverage_writer')
     modules['coverage_writer'] = coverage_writer
 
+    # Value capture
+    value_capture = LibraryModule('value_capture')
+    modules['value_capture'] = value_capture
+
     # Logger
     logger = LibraryModule('logger')
     modules['logger'] = logger

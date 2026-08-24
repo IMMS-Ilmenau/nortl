@@ -1,6 +1,6 @@
 # Debugging Features
 
-When developing hardware descriptions, being able to observe the internal state of your design during simulation is invaluable. noRTL provides two built-in debugging mechanisms that seamlessly integrate with Verilog simulation frameworks. The idea of these features is that you can debug your circuit without necessarily looking at waveforms
+When developing hardware descriptions, being able to observe the internal state of your design during simulation is invaluable. noRTL provides three built-in debugging mechanisms that seamlessly integrate with Verilog simulation frameworks. The idea of these features is that you can debug your circuit without necessarily looking at waveforms
 
 ## `engine.print()` - Console Output
 
@@ -56,3 +56,18 @@ engine.print("Processing state %d, counter = %d", state, counter)
 **Execution timing:** Since `$display` is inside an `always_ff` block, it executes on the clock edge, not immediately when the state is entered. If you need to print a value that changes within a state, ensure you understand the clocking behavior.
 
 **Simulation-only:** These print statements are synthesized into Verilog but are typically ignored by synthesis tools. They are meant for simulation and debugging only — they do not affect the final hardware. By default, the print statements are wrapped in `// synthesis translate_off` guards. They can be [customized](../debugging/logging/setup.md#synthesis-guards) to match your synthesis tool.
+
+## `engine.capture()` - Value Capture
+
+The `engine.capture()` method records the values of signals at specific points in the simulation. Instead of printing to the console, the values are written to a JSONL file, which can later be parsed and verified — for example, to check a sequence of values over the full course of the simulation.
+
+```python
+engine.capture("count", counter)          # single value
+engine.capture("pair", counter, 42)       # multiple values
+```
+
+Each call emits one JSONL record of the form `{"type": "value", "test": "<test name>", "<key>": [value1, value2, ...]}`.
+
+When using the [noRTL test wrapper](06_pytest.md), the file is parsed automatically after the simulation, and the captured values are passed to the `callback_after_simulation()` method, where they can be verified with regular Python assertions.
+
+Refer to the [value capture](../debugging/value_capture/setup.md) setup guide for more details.

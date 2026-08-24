@@ -1,7 +1,7 @@
 from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 from nortl.core.protocols import ConditionalAssignmentProto, EngineProto, SelectorAssignmentProto
-from nortl.renderer.verilog_utils.print_handlers import CoverageWriter, Logger, PrintHandlerProto
+from nortl.renderer.verilog_utils.print_handlers import CoverageWriter, Logger, PrintHandlerProto, ValueCapture
 from nortl.renderer.verilog_utils.utils import VerilogRenderable
 
 from .verilog_utils import ENCODINGS, create_state_var
@@ -60,6 +60,7 @@ class VerilogRenderer:
         self.print_handlers: Dict[str, PrintHandlerProto] = {
             'logger': Logger(self),
             'coverage_writer': CoverageWriter(self),
+            'value_capture': ValueCapture(self),
         }
 
         self.clk_request_signals: List[str] = []

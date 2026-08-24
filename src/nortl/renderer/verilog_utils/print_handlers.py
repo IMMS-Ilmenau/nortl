@@ -14,6 +14,7 @@ __all__ = [
     'CoverageWriter',
     'Logger',
     'PrintHandlerProto',
+    'ValueCapture',
 ]
 
 
@@ -229,3 +230,47 @@ class CoverageWriter(BasePrintHandler[AnyRecord]):
             case 'covergroup':
                 args = [to_verilog(record.name), as_array(record.axis), as_array((as_array(axis_limits) for axis_limits in record.limits))]
         return args, kwargs
+
+
+class ValueCapture(BasePrintHandler[str]):
+    """Print handler for value_capture.
+
+    The value capture emits a single JSONL record per print of the form
+    `{"type": "value", "test": "<test name>", "<key>": <value>}`.
+
+    The message is used as the value and must already be a properly formatted JSON
+    fragment (e.g. `12`, `"text"`, `[1, 2, 3]`). It is inserted verbatim into the
+    record. If format specifiers (`%d`, `%s` etc.) are used, the corresponding values
+    must be provided as positional arguments and are resolved via `$sformatf()`.
+    The record key is provided via the `key` keyword argument.
+
+    A matching implementation is found in the [noRTL simulation library][nortl.verilog_library.sim] in `SIM_MODULES['value_capture']`.
+    """
+
+    INSTANCE_NAME: ClassVar[str] = 'value_capture'
+    """Instance name for value capture in Verilog."""
+
+    def render(self, print_message: PrintMessageProto[str]) -> VerilogRenderable:
+        """Render message."""
+        if not isinstance(print_message.message, str):
+            raise TypeError(f'Value capture print handler expects a string message, got {type(print_message.message)}!')
+        if 'key' not in print_message.kwargs:
+            raise KeyError('Value capture requires the record key in kwargs!')
+        elif not isinstance(key := print_message.kwargs.get('key'), str):
+            raise TypeError(f'Record key must be a string, got {type(key)}!')
+
+        # The value is inserted verbatim into the record. Escape backslashes and quotes so the
+        # JSON fragment survives as a Verilog string literal. Invoke $sformatf if format arguments are provided.
+        fragment = print_message.message.replace('\\', '\\\\').replace('"', '\\"')
+        value: Union[VerilogRenderable, str]
+        if len(print_message.args) > 0:
+            value = VerilogFunctionCall('$sformatf', True, to_verilog(fragment), *print_message.args).render()
+        else:
+            value = to_verilog(fragment)
+
+        function_call = VerilogFunctionCall(f'{self.INSTANCE_NAME}.capture', False, to_verilog(key), value)
+
+        if print_message.condition is None or (print_message.condition.is_constant and print_message.condition.value):  # type: ignore[attr-defined]
+            return function_call
+        else:
+            return VerilogIf(print_message.condition, function_call)

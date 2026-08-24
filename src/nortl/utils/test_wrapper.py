@@ -1,3 +1,4 @@
+import json
 import re
 import subprocess
 from abc import ABC, abstractmethod
@@ -5,7 +6,7 @@ from inspect import currentframe, getframeinfo
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import FrameType
-from typing import Union
+from typing import Dict, List, Union
 
 import pytest
 
@@ -94,6 +95,21 @@ class NoRTLTestBase[T: EngineProto](ABC):
         return engine
 
     def callback_after_execution(self, engine: T) -> None:
+        pass
+
+    def callback_after_simulation(self, engine: T, captured_values: List[Dict[str, object]]) -> None:
+        """Post-simulation callback with the parsed value capture data.
+
+        This callback is invoked after the simulation has finished and the value capture
+        records (emitted via `engine.capture()`) have been parsed from the JSONL file.
+        It can be used to verify values that were captured over the full course of the simulation.
+
+        Arguments:
+            engine (T): The engine instance
+            captured_values: List of captured records, one dict per `engine.capture()` call,
+                in the order they were emitted during simulation. Each dict maps the capture
+                key to the captured value(s), e.g. `{'count': [1]}` or `{'pair': [1, 42]}`.
+        """
         pass
 
     def get_test_engine(self) -> T:
@@ -307,6 +323,11 @@ class NoRTLTestBase[T: EngineProto](ABC):
             # Save path to coverage file
             self.coverage_file = tmp_path / (self.engine.module_name + '.coverage.jsonl')
 
+            # Parse value capture records and invoke the post-simulation callback
+            self.value_capture_file = tmp_path / 'values.values.jsonl'
+            self.captured_values = self.parse_value_capture(self.value_capture_file)
+            self.callback_after_simulation(self.engine, self.captured_values)
+
             self.callback_after_execution(self.engine)
 
     def render(self, working_dir: Path, engine: T) -> Path:
@@ -335,6 +356,9 @@ class NoRTLTestBase[T: EngineProto](ABC):
             '+define+NORTL_COV' if self.engine.coverage.enabled else '',
             f'+define+NORTL_COV_OUTPUT_DIRECTORY="{working_dir.as_posix()}"',
             '+define+NORTL_COV_TEST_NAME="pytest"',
+            '+define+NORTL_VCAP' if self._has_value_capture() else '',
+            f'+define+NORTL_VCAP_OUTPUT_DIRECTORY="{working_dir.as_posix()}"',
+            '+define+NORTL_VCAP_TEST_NAME="pytest"',
             str(testbench_file),
             *(str(file) for file in source_files),
         ]
@@ -363,3 +387,40 @@ class NoRTLTestBase[T: EngineProto](ABC):
         cmd = ['vvp', str(compiled_file)]
 
         return subprocess.run(cmd, capture_output=True, text=True)
+
+    def _has_value_capture(self) -> bool:
+        """Check if the engine emits value capture records."""
+        for worker_states in self.engine.states.values():
+            for state in worker_states:
+                for print_message in state.prints:
+                    if print_message.handler == 'value_capture':
+                        return True
+        return False
+
+    def parse_value_capture(self, source_file: Path) -> List[Dict[str, object]]:
+        """Parse value capture records from a JSONL file.
+
+        Arguments:
+            source_file: Path to the value capture JSONL file.
+
+        Returns:
+            List of captured records, one dict per `engine.capture()` call, in emission order.
+            Each dict maps the capture key to the captured value(s), with the `type` and
+            `test` fields of the JSONL records removed.
+        """
+        captured_values: List[Dict[str, object]] = []
+
+        if not source_file.exists():
+            return captured_values
+
+        for line in source_file.read_text().splitlines():
+            if not line.strip():
+                continue
+
+            record = json.loads(line)
+            if record.get('type') != 'value':
+                continue
+
+            captured_values.append({key: value for key, value in record.items() if key not in ('type', 'test')})
+
+        return captured_values

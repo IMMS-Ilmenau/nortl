@@ -141,3 +141,37 @@ class TestCustomModule(NoRTLTestBase[CoreEngine]):
 
     def verify_final_state(self, engine: CoreEngine) -> None:
         self.assertTrue(engine.signals['inverter_out'] == 0)
+
+
+class TestTheTestWrapperWithValueCapture(NoRTLTestBase[Engine]):
+    """Test that values captured during simulation are parsed and passed to callback_after_simulation."""
+
+    def init_sequence(self) -> Engine:
+        f = Engine('my_engine')
+        f.define_local('counter', 8, 0)
+        return f
+
+    def dut(self, engine: Engine) -> None:
+        for _ in range(5):
+            engine.set(engine.signals['counter'], engine.signals['counter'] + 1)
+            engine.capture('count', engine.signals['counter'])
+            engine.capture('pair', engine.signals['counter'], 42)
+            engine.sync()
+
+    def callback_after_simulation(self, engine: Engine, captured_values: list[dict[str, object]]) -> None:
+        # One dict per engine.capture() call, in emission order
+        assert captured_values == [
+            {'count': [1]},
+            {'pair': [1, 42]},
+            {'count': [2]},
+            {'pair': [2, 42]},
+            {'count': [3]},
+            {'pair': [3, 42]},
+            {'count': [4]},
+            {'pair': [4, 42]},
+            {'count': [5]},
+            {'pair': [5, 42]},
+        ], captured_values
+
+    def verify_final_state(self, engine: Engine) -> None:
+        self.assertTrue(engine.signals['counter'] == 5)

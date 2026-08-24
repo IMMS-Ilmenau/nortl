@@ -64,6 +64,49 @@ noRTL provides hardware-aware assertions that run *inside* the simulation. They 
 
 If any assertion fails, the error counter increments, and the simulation marks the test as failed. You can access the final error count via `self.engine.signals['error_ctr']` if needed.
 
+## Value Capture
+
+Hardware-aware assertions check conditions *during* the simulation, but sometimes you want to collect values over the full course of the simulation and verify them afterwards in Python. For this, noRTL provides **value capture**: `engine.capture()` records values into a JSONL file during simulation, and the test wrapper parses that file and hands the data to a post-simulation callback.
+
+### Capturing Values
+
+Use `engine.capture(key, *values)` anywhere in your `dut` or `the_testbench` sequence:
+
+```python
+def dut(self, engine: Engine) -> None:
+    for _ in range(5):
+        engine.set(self.counter, self.counter + 1)
+        engine.capture('count', self.counter)          # single value
+        engine.capture('pair', self.counter, 42)       # multiple values
+        engine.sync()
+```
+
+Each call emits one JSONL record of the form `{"type": "value", "test": "<test name>", "<key>": [value1, value2, ...]}`. The values are written as a list, so a single-value capture arrives as a one-element list.
+
+### Verifying Captured Values
+
+Override `callback_after_simulation(engine, captured_values)` in your test class. It is invoked after the simulation has finished and the JSONL file has been parsed. `captured_values` is a list of dicts — one dict per `engine.capture()` call, in emission order:
+
+```python
+def callback_after_simulation(self, engine: Engine, captured_values: list) -> None:
+    assert captured_values == [
+        {'count': [1]},
+        {'pair': [1, 42]},
+        {'count': [2]},
+        {'pair': [2, 42]},
+        {'count': [3]},
+        {'pair': [3, 42]},
+        {'count': [4]},
+        {'pair': [4, 42]},
+        {'count': [5]},
+        {'pair': [5, 42]},
+    ], captured_values
+```
+
+Note that `captured_values` contains plain Python data, not engine signals — use regular Python `assert` statements here, not `self.assertTrue`/`self.assertEqual` (which render Verilog assertions for in-simulation checks).
+
+The parsed data is also available as `self.captured_values`, if you need it in `verify_final_state` or elsewhere. The raw JSONL file (`self.value_capture_file`) only exists while the simulation run is active.
+
 ## Example Test
 
 Here is a complete example demonstrating a test that drives a channel and verifies the DUT's response:

@@ -13,7 +13,7 @@ from nortl.components import Channel, ElasticChannel, LookupTable, Timer
 from nortl.core import All, Any, Concat, Const, CoreEngine, IfThenElse, Var, Volatile, enable_tracing, to_renderable
 from nortl.core.constructs import Condition, ElseCondition, Fork, ForLoop, Segment, WhileLoop
 from nortl.core.operations import RawText
-from nortl.core.protocols import ParameterProto, Renderable
+from nortl.core.protocols import Operand, ParameterProto, Renderable
 from nortl.renderer.verilog_renderer import VerilogRenderer
 from nortl.renderer.verilog_utils import ENCODINGS
 
@@ -212,6 +212,31 @@ class ManagementMixin(CoreEngine):
 
     def expose_clk_req(self) -> None:
         self.define_output('CLK_REQ', 1, value=RawText('GCLK_enable'))
+
+    def capture(self, key: str, *values: Operand) -> None:
+        """Capture values for debugging and analysis.
+
+        Emits a value capture record of the form
+        `{"type": "value", "test": "<test name>", "<key>": [value1, value2, ...]}`
+        via the [ValueCapture][nortl.renderer.verilog_utils.print_handlers.ValueCapture] print handler.
+        The values are captured in the current state and rendered as decimal numbers.
+
+        Example:
+        ```python
+        engine = Engine("my_engine")
+        counter = engine.define_local("counter", 8, 0)
+        engine.capture("counters", counter, 34)
+        ```
+
+        Arguments:
+            key: The record key.
+            values: The values to capture. At least one value is required.
+        """
+        if len(values) == 0:
+            raise ValueError('At least one value must be captured!')
+
+        format_string = '[' + ', '.join('%d' for _ in values) + ']'
+        self.current_state.print(format_string, *(to_renderable(value) for value in values), handler='value_capture', key=key)
 
 
 class RendererMixin(CoreEngine):

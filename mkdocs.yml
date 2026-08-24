@@ -35,6 +35,9 @@ nav:
     - Logging:
       - Setup: debugging/logging/setup.md
       - Logger: debugging/logging/logger.md
+    - Value Capture:
+      - Setup: debugging/value_capture/setup.md
+      - Value Capture Module: debugging/value_capture/value_capture.md
   - Code Reference: reference/
   # TODO Add new sections to the documentation here
 
