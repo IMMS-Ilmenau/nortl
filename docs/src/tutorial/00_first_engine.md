@@ -39,7 +39,7 @@ The engine name (here: "MrCoffee") needs to be a proper verilog identifier since
 
 ## Defining inputs and outputs
 
-Now it is time to define the interface of our system. Note that noRTL cares about reset and clock pins so we do not have to include these here.
+Now it is time to define the interface of our system. Note that noRTL automatically handles reset and clock pins, so we do not need to include them here.
 
 The engine object provides two functions for declaring ports (function signatures are truncated to keep the explanation simple):
 
