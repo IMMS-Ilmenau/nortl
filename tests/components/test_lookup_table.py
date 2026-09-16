@@ -1,11 +1,12 @@
 # ruff: noqa: N801
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
 from nortl.components import LookupTable
 from nortl.core import CoreEngine, IfThenElse
 from nortl.core.operations import Const
+from nortl.core.protocols import Renderable
 from nortl.utils.test_wrapper import NoRTLTestBase
 
 
@@ -102,6 +103,29 @@ class TestLookupTable_NestedChainedSet(NoRTLTestBase[CoreEngine]):
         engine.set(self.out, self.rows[0][1])
         engine.sync()
         self.assertEqual(self.out, 2)
+
+
+class TestLookupTable_NestedDynamicSim(NoRTLTestBase[CoreEngine]):
+    """Chained dynamic access rows[row_idx][col_idx] with renderable indices (2-D lookup)."""
+
+    def init_sequence(self) -> CoreEngine:
+        engine = CoreEngine('my_engine')
+        self.rows = LookupTable([LookupTable([1, 2]), LookupTable([3, 4])])
+        self.row = engine.define_input('ROW', width=1)
+        self.col = engine.define_input('COL', width=2)
+        return engine
+
+    def dut(self, engine: CoreEngine) -> None:
+        pass
+
+    def the_testbench(self, engine: CoreEngine) -> None:
+        # rows[row][col]: first getitem muxes the row, second reads the column.
+        value = cast('Renderable', cast('LookupTable[Any]', self.rows[self.row])[self.col])
+        for row_val, col_val, expected in ((0, 0, 1), (0, 1, 2), (1, 0, 3), (1, 1, 4)):
+            engine.set(self.row, row_val)
+            engine.set(self.col, col_val)
+            engine.sync()
+            self.assertEqual(value, expected)
 
 
 class TestLookupTable_GetItemAndListProtocol:
@@ -297,35 +321,54 @@ class TestLookupTable_CountBuildTime:
 
 
 class TestLookupTable_WhereBuildTime:
-    def test_where_cond_true(self) -> None:
-        table = LookupTable([10, 20, 30], default=0)
-        results = table.where(True)
-        assert len(results) == 3
-        for i, expected in enumerate((10, 20, 30)):
-            assert results[i].is_constant
-            assert cast(Const, results[i]).value == expected
+    def test_where_no_arg_returns_nonzero_indices(self) -> None:
+        # No-arg form is numpy's np.where(lt): indices of nonzero entries.
+        table = LookupTable([0, 1, 0, 2, 0], default=0)
+        results = table.where()
+        assert len(results) == 2
+        assert cast(Const, results[0]).value == 1
+        assert cast(Const, results[1]).value == 3
 
-    def test_where_cond_false(self) -> None:
+    def test_where_no_arg_all_nonzero(self) -> None:
+        table = LookupTable([1, 2, 3], default=0)
+        results = table.where()
+        assert [cast(Const, r).value for r in results] == [0, 1, 2]
+
+    def test_where_no_arg_all_zero_returns_empty(self) -> None:
+        table = LookupTable([0, 0, 0], default=0)
+        assert table.where() == []
+
+    def test_where_two_arg_value_selection(self) -> None:
+        # Two-arg form is numpy's np.where(cond, x, y): element-wise values.
         table = LookupTable([10, 20, 30], default=0)
         results = table.where(False, other=99)
         for result in results:
             assert result.is_constant
             assert cast(Const, result).value == 99
 
-    def test_where_default_substitute(self) -> None:
+    def test_where_two_arg_keeps_entries(self) -> None:
+        table = LookupTable([10, 20, 30], default=0)
+        results = table.where(True, other=99)
+        for i, expected in enumerate((10, 20, 30)):
+            assert cast(Const, results[i]).value == expected
+
+    def test_where_condition_without_other_uses_default(self) -> None:
+        # where(cond) is value-selection with the table's default as substitute.
         table = LookupTable([10, 20, 30], default=7)
         results = table.where(False)
         for result in results:
             assert cast(Const, result).value == 7
 
-    def test_where_length_matches(self) -> None:
-        table = LookupTable([1, 2, 3, 4, 5])
-        assert len(table.where(True)) == 5
+    def test_where_other_without_condition_raises(self) -> None:
+        # `other` only makes sense together with a condition.
+        table = LookupTable([1, 2, 3], default=0)
+        with pytest.raises(TypeError):
+            table.where(other=99)
 
     def test_nested_raises(self) -> None:
         rows = LookupTable([LookupTable([1, 2]), LookupTable([3, 4])])
         with pytest.raises(TypeError):
-            rows.where(True)
+            rows.where()
 
     def test_lookup_table_other_raises(self) -> None:
         table = LookupTable([1, 2])
@@ -468,6 +511,149 @@ class TestLookupTable_Update:
         result = table.read(Const(1))
         assert hasattr(result, 'render')
         assert not result.is_constant  # live signal, cannot fold
+
+
+class TestLookupTable_SetItem:
+    def test_single_index(self) -> None:
+        table = LookupTable([10, 20, 30, 40])
+        table[1] = 99
+        assert cast(Const, table.read(0)).value == 10
+        assert cast(Const, table.read(1)).value == 99
+        assert cast(Const, table.read(2)).value == 30
+        assert cast(Const, table.read(3)).value == 40
+
+    def test_single_index_out_of_range(self) -> None:
+        table = LookupTable([10, 20, 30, 40])
+        with pytest.raises(IndexError):
+            table[4] = 99
+        with pytest.raises(IndexError):
+            table[-1] = 99
+
+    def test_fancy_indexing_scalar_broadcast(self) -> None:
+        table = LookupTable([10, 20, 30, 40])
+        table[[1, 3]] = 5
+        assert cast(Const, table.read(0)).value == 10
+        assert cast(Const, table.read(1)).value == 5
+        assert cast(Const, table.read(2)).value == 30
+        assert cast(Const, table.read(3)).value == 5
+
+    def test_fancy_indexing_value_sequence(self) -> None:
+        table = LookupTable([10, 20, 30, 40])
+        table[[0, 2]] = [100, 200]
+        assert cast(Const, table.read(0)).value == 100
+        assert cast(Const, table.read(1)).value == 20
+        assert cast(Const, table.read(2)).value == 200
+        assert cast(Const, table.read(3)).value == 40
+
+    def test_fancy_indexing_from_lookup_table(self) -> None:
+        table = LookupTable([10, 20, 30, 40])
+        table[LookupTable([1, 2])] = 7
+        assert cast(Const, table.read(1)).value == 7
+        assert cast(Const, table.read(2)).value == 7
+
+    def test_fancy_indexing_list_of_renderables_builds(self) -> None:
+        engine = CoreEngine('my_engine')
+        table = LookupTable([10, 20, 30, 40])
+        # B is a list of Renderables (dynamic indices), like np.asarray of signals.
+        b = [engine.define_input('B0', width=3), engine.define_input('B1', width=3)]
+        table[b] = 5
+        # Each dynamic index produces a live update; the read is not constant.
+        result = table.read(Const(1))
+        assert hasattr(result, 'render')
+        assert not result.is_constant
+
+    def test_setitem_from_where_nonzero(self) -> None:
+        # No-arg where() returns indices of nonzero entries, so the write
+        # scatters to exactly those positions (numpy's A[np.where(A)] = v idiom).
+        table = LookupTable([0, 1, 0, 2, 0], default=0)
+        table[table.where()] = 3
+        assert [cast(Const, table.read(Const(i))).value for i in range(5)] == [0, 3, 0, 3, 0]
+
+    def test_setitem_from_where_two_arg(self) -> None:
+        # where(cond, other) returns `other` for every position, so all
+        # writes collapse onto the single address `other`.
+        table = LookupTable([0, 1, 2], default=0)
+        table[table.where(False, 1)] = 3
+        assert cast(Const, table.read(Const(1))).value == 3
+        assert cast(Const, table.read(Const(0))).value == 0
+        assert cast(Const, table.read(Const(2))).value == 2
+
+    def test_fancy_indexing_length_mismatch(self) -> None:
+        table = LookupTable([10, 20, 30, 40])
+        with pytest.raises(ValueError):
+            table[[0, 1]] = [100, 200, 300]
+
+    def test_fancy_indexing_out_of_range(self) -> None:
+        table = LookupTable([10, 20, 30, 40])
+        with pytest.raises(IndexError):
+            table[[0, 9]] = 5
+
+    def test_slice_broadcast(self) -> None:
+        table = LookupTable([10, 20, 30, 40])
+        table[1:3] = 55
+        assert cast(Const, table.read(0)).value == 10
+        assert cast(Const, table.read(1)).value == 55
+        assert cast(Const, table.read(2)).value == 55
+        assert cast(Const, table.read(3)).value == 40
+
+    def test_dynamic_address(self) -> None:
+        engine = CoreEngine('my_engine')
+        addr = engine.define_input('ADDR', width=3)
+        table = LookupTable([10, 20, 30, 40])
+        table[addr] = 99
+        # A dynamic address update is applied whenever addr selects it.
+        result = table.read(addr)
+        assert hasattr(result, 'render')
+        assert not result.is_constant
+
+
+class TestLookupTable_SetItemDynamicListSim(NoRTLTestBase[CoreEngine]):
+    def init_sequence(self) -> CoreEngine:
+        engine = CoreEngine('my_engine')
+        self.b0 = engine.define_input('B0', width=3)
+        self.b1 = engine.define_input('B1', width=3)
+        self.table = LookupTable([10, 20, 30, 40])
+        # B is a list of Renderables (dynamic indices), like np.asarray of signals.
+        self.table[[self.b0, self.b1]] = 5
+        return engine
+
+    def dut(self, engine: CoreEngine) -> None:
+        pass
+
+    def the_testbench(self, engine: CoreEngine) -> None:
+        # Each dynamic index, when it selects a position, writes 5 there.
+        for b0_val, b1_val in ((1, 3), (0, 2), (1, 1)):
+            engine.set(self.b0, b0_val)
+            engine.set(self.b1, b1_val)
+            engine.sync()
+            expected = [10, 20, 30, 40]
+            for pos in (b0_val, b1_val):
+                expected[pos] = 5
+            for i, exp in enumerate(expected):
+                self.assertEqual(self.table.read(Const(i)), exp)
+
+
+class TestLookupTable_WhereLiveScatterSim(NoRTLTestBase[CoreEngine]):
+    def init_sequence(self) -> CoreEngine:
+        engine = CoreEngine('my_engine')
+        # Live entries: where() returns indices of the nonzero entries at runtime.
+        self.entries = [engine.define_input(f'E{i}', width=4) for i in range(5)]
+        self.table = LookupTable(self.entries, default=0)
+        # numpy idiom: A[np.where(A)] = 5  (scatter to the nonzero positions)
+        self.table[self.table.where()] = 5
+        return engine
+
+    def dut(self, engine: CoreEngine) -> None:
+        pass
+
+    def the_testbench(self, engine: CoreEngine) -> None:
+        # A position becomes 5 exactly when its entry is nonzero at runtime.
+        for pattern in ((1, 0, 1, 0, 1), (0, 0, 0, 0, 0), (2, 0, 0, 3, 0), (1, 1, 1, 1, 1)):
+            for i, val in enumerate(pattern):
+                engine.set(self.entries[i], val)
+            engine.sync()
+            for i, val in enumerate(pattern):
+                self.assertEqual(self.table.read(Const(i)), 5 if val != 0 else 0)
 
 
 class TestLookupTable_MinMaxSim(NoRTLTestBase[CoreEngine]):
