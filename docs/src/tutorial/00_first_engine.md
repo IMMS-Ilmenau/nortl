@@ -55,7 +55,7 @@ start = engine.define_input("START", 1) # The start button
 grinder_en = engine.define_output("GRINDER_EN", 1, 0) # Enable/Disable the grinder, disabled by default
 heater_en = engine.define_output("HEATER_EN", 1, 0) # Enable/Disable the heater
 pump_en = engine.define_output("PUMP_EN", 1, 0) # Enable/Disable the pump
-ready = engine.define_output("READY", 1) # Show the user that we are ready to brew the next cup of coffee
+ready = engine.define_output("READY", 1, 0) # High while the machine is idle, low during a brew
 ```
 
 ## Describing the process
@@ -78,6 +78,7 @@ In case of our Mr. Coffee, the code can look like this:
 from nortl import Const
 
 with engine.while_loop(Const(True)): # A forever-loop to restart the process after we finished
+    engine.set(ready, 1) # Idle. This assignment is not on the reset state, so it does not fight the reset value
     engine.wait_for(start.rising()) # Wait until the user presses the button
     engine.set(ready, 0)
     engine.set(heater_en, 1) # Turn on the heater. Note that we need to use the set-method to write a value to a signal

@@ -47,7 +47,7 @@ class MyTest(NoRTLTestBase[Engine]):
             {'pair': [1, 42]},
             {'count': [2]},
             {'pair': [2, 42]},
-        ], captured_values
+        ]
 ```
 
 `captured_values` is a list of dicts — one dict per `engine.capture()` call, in emission order. Each dict maps the capture key to the captured value(s), with the `type` and `test` fields of the JSONL records removed.
@@ -56,7 +56,7 @@ class MyTest(NoRTLTestBase[Engine]):
 
     `captured_values` contains plain Python data, not engine signals. Use regular Python `assert` statements in this callback, not `self.assertTrue`/`self.assertEqual` (which render Verilog assertions for in-simulation checks).
 
-The parsed data is also available as `self.captured_values`, if you need it in `verify_final_state()` or elsewhere. The raw JSONL file (`self.value_capture_file`) only exists while the simulation run is active.
+The parsed data is also available as `self.captured_values`, if you need it in `callback_after_execution()`. The raw JSONL file (`self.value_capture_file`) only exists while the simulation run is active.
 
 ### Custom Simulator
 
@@ -127,7 +127,7 @@ The value capture module requires some information, that is either read from env
     - `$NORTL_VCAP_OUTPUT_DIRECTORY` or `$TB_OUTDIR` define the output directory.
     - `$NORTL_VCAP_TEST_NAME` or `$TEST_NAME` define the test name.
 
-    If there are multiple options, the first non-empty environment variable is used. If no value is found, the value capture module will stop simulation with a `$fatal` call.
+    If there are multiple options for the output directory or test name, the first non-empty environment variable is used. If no value is found, the value capture module will stop simulation with a `$fatal` call.
 
     !!! warning
 

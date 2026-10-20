@@ -10,7 +10,7 @@ In hardware description, every step in your Python code typically maps to a stat
 * **Improve Readability:** Break complex logic into modular, reusable functions that mirror standard software practices.
 * **Manage Memory Efficiently:** Automatically handle temporary signals and memory zones for intermediate calculations using scratch managers.
 
-> **Note:** Reuse applies to calls with the *same* arguments. To share a single state sequence across *different* input values, use [Input Slots](#input-and-output-slots).
+> **Note:** Reuse applies to calls with the *same* arguments on the *same* worker. A `fork()` runs on another worker, so the same arguments there render a second segment. To share a single state sequence across *different* input values, use [Input Slots](#input-and-output-slots).
 
 ## How to use Segments
 
@@ -22,8 +22,7 @@ The most common use case is decorating standalone functions that take the `Engin
 
 ```python
 from nortl import Engine, Segment, to_renderable
-from nortl.core.protocols import EngineProto
-from nortl.core.operations import Renderable
+from nortl.core.protocols import EngineProto, Renderable
 
 engine = Engine('DataSender')
 output = engine.define_output('OUTPUT', width=1)
@@ -56,6 +55,9 @@ with engine.while_loop(True):
 You can also attach segments to methods of helper classes. This is ideal for encapsulating complex subsystems while keeping the top-level script clean.
 
 ```python
+from nortl import Engine, Segment, to_renderable
+from nortl.core.protocols import EngineProto, Renderable
+
 class BitStreamSender:
     def __init__(self, engine: EngineProto):
         self.engine = engine
@@ -69,6 +71,7 @@ class BitStreamSender:
             self.engine.sync()
 
 # Usage:
+engine = Engine('my_engine')
 sender = BitStreamSender(engine)
 with engine.while_loop(True):
     sender.send_data(0x4A)
@@ -81,6 +84,9 @@ By default, noRTL creates a new state sequence for every unique combination of a
 Input slots tell noRTL to copy the arguments into temporary scratch signals *before* entering the segment. This allows the segment to ignore the actual values during state generation, effectively creating a parameterized function that shares one FSM path for all inputs.
 
 ```python
+from nortl import Segment
+from nortl.core.protocols import EngineProto, Renderable
+
 @Segment.with_input_slots(data=8)
 def send_byte(engine: EngineProto, data: Union[Renderable, int]) -> None:
     for i in range(8):
@@ -89,11 +95,18 @@ def send_byte(engine: EngineProto, data: Union[Renderable, int]) -> None:
 ```
 
 You can also use **Output Slots** to safely copy return values out of a segment into scratch signals. This prevents read-only conflicts when the segment is called multiple times in different contexts or branches.
+The decorated function must return a signal (`Signal`, a slice, or a `ScratchSignal`). An `int` is rejected.
 
 ```python
+from nortl import Segment
+from nortl.core.protocols import EngineProto, Renderable
+
 @Segment.with_output_slots(8)
-def read_data(engine: EngineProto) -> Union[Renderable, int]:
-    # ... logic to read data ...
+def read_data(engine: EngineProto) -> Renderable:
+    result = engine.define_scratch(8)
+    engine.sync()
+    engine.set(result, 0x4A)
+    engine.sync()
     return result
 ```
 
@@ -110,18 +123,37 @@ Slot widths can be configured flexibly to match your design needs:
 
 To ensure hardware safety and catch configuration errors early, you can validate arguments before a segment is instantiated or called using `with_input_checks`. This is particularly useful when combined with input slots, as the actual function body won't be executed for every different input.
 
+A positional validator is called with every argument except the engine, in order.
+
 ```python
-def validate_length(length: int) -> bool:
-    return 0 < length <= 32
+from nortl import Segment, to_renderable
+from nortl.core.protocols import EngineProto, Renderable
+
+def validate_length(data: Renderable | int, length: int) -> bool:
+    # length is copied into a 5-bit slot, so 32 does not fit.
+    return 0 < length < 32
 
 @Segment.with_input_slots(data=8, length=5).with_input_checks(validate_length)
 def send_dynamic(engine: EngineProto, data: Union[Renderable, int], length: int) -> None:
-    # ... transmission logic ...
+    # Here, data and length are both scratch signals
+    # length gets initialized with the input value when entering the Segment and can used as a free counter variable
+    with engine.while(length > 0):
+        engine.set(length, length - 1)
+        engine.sync()
+        # ... transmission logic ...
 ```
 
 You can also pass inline lambda validators for quick checks:
+
 ```python
-@Segment.with_input_slots(data=8).with_input_checks(length=lambda x: x < 32)
+from nortl import Segment
+from nortl.core.protocols import EngineProto, Renderable
+
+@Segment.with_input_slots(data=8).with_input_checks(length=lambda x: 0 < x <= 8)
 def send_dynamic(engine: EngineProto, data: Union[Renderable, int], length: int) -> None:
-    # ...
+    # data is a scratch copy. length is still a Python int.
+    for i in range(length):
+        engine.set(output, data[i])
+        engine.sync()
+        # ...
 ```

@@ -10,8 +10,9 @@ Call the `monitor_state_coverage()` and `monitor_transition_coverage()` methods 
 
 === "Standalone Engine"
 
-    ```python hl_lines="10 11"
+    ```python hl_lines="11 12"
     from pathlib import Path
+
     from nortl import Engine
     from nortl.renderer import VerilogRenderer
 
@@ -58,7 +59,7 @@ Coverpoints and covergroups are bound to a specific state in the engine. They mu
 === "Coverpoint"
 
     ```python hl_lines="5"
-    engine.define_local(error_code, width=3)
+    error_code = engine.define_local("error_code", width=3)
     # ...
 
     # Add coverpoint that checks if the engine reacts to an error code
@@ -70,7 +71,7 @@ Coverpoints and covergroups are bound to a specific state in the engine. They mu
 === "Covergroup"
 
     ```python hl_lines="5"
-    engine.define_local(error_code, width=3)
+    error_code = engine.define_local("error_code", width=3)
     # ...
 
     # Add a covergroup that checks if the engine has reacted to all error codes
@@ -107,8 +108,8 @@ For example, with Xcelium use `xrun -top <testbench_name> -top coverage_writer .
 
     # ...
 
-    # Change name from 'coverage_writer' to 'nortl_coverage_writer'
-    CoverageWriter.INSTANCE_NAME = 'nortl_coverage_writer'
+    # Change name from "coverage_writer" to "nortl_coverage_writer"
+    CoverageWriter.INSTANCE_NAME = "nortl_coverage_writer"
 
     # Render the engine
     renderer = VerilogRenderer(engine)
@@ -131,7 +132,7 @@ The coverage writer requires some information, that is either read from environm
     - `$NORTL_COV_OUTPUT_DIRECTORY` or `$TB_OUTDIR` define the output directory.
     - `$NORTL_COV_TEST_NAME` or `$TEST_NAME` define the test name.
 
-    If there are multiple options, the first non-empty environment variable is used. If no value is found, the coverage writer will stop simulation with a `$fatal` call.
+    If there are multiple options for the output directory or test name, the first non-empty environment variable is used. If no value is found, the coverage writer will stop simulation with a `$fatal` call.
 
 === "Integrated Test Mode"
 
@@ -192,8 +193,8 @@ from nortl.renderer import VerilogRenderer
 
 # Alternative synthesis guard (tuple of opening and closing line)
 SYNTHESIS_GUARD = (
-    '`IFDEF SYNTH',
-    '`ENDIF'
+    `IFDEF SYNTH",
+    "`ENDIF"
 )
 
 renderer = VerilogRenderer(engine, synthesis_guard=SYNTHESIS_GUARD)
@@ -241,8 +242,8 @@ If multiple noRTL engines are used in a design, there will be one file per engin
             assert engine.coverage.transition_coverage.covered == engine.coverage.transition_coverage.total
     ```
 
-As show in the example, the [coverage manager][nortl.core.coverage.manager.CoverageManager] offers statistics for state and transition coverage.
-The objects contain the number of covered, uncovered and total states and transitions in all engines.
+As shown in the example, the [coverage manager][nortl.core.coverage.manager.CoverageManager] offers statistics for state and transition coverage.
+The objects contain the number of covered, uncovered and total states and transitions across all workers.
 
 !!! experimental
 
@@ -276,7 +277,7 @@ You can also check coverage statistics for individual coverpoints and and coverg
     engine.coverage.annotate(coverage_file)
 
     # Check a specific coverpoint (by its name)
-    assert engine.coverage.coverpoints['Checked error handling'].covered
+    assert engine.coverage.coverpoints["Checked error handling"].covered
     ```
 
 === "Covergroup"
@@ -302,7 +303,7 @@ from nortl.renderer import JsonRenderer
 engine.coverage.annotate(coverage_file)
 
 # Save engine including coverage
-output_file = Path('build/my_engine.json')
+output_file = Path("build/my_engine.json")
 renderer = JsonRenderer(engine, include_coverage=True)
 output_file.write_text(renderer.render())
 ```

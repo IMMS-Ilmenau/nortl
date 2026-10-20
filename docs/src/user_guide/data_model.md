@@ -4,11 +4,11 @@ The key to understanding noRTL lies in recognizing how its data structures are d
 
 ## Representation of a Engine
 
-A noRTL engine consists of a set of states and a set of IOs. Each state has a list of assigns and a list of transitions. This is rather conventional. The new idea of this tool is that these lists can be modified *on the fly*, i.e. during the runtime of the python code.
+A noRTL engine consists of a set of states and a set of IOs. Each state has a list of assigns and a list of transitions. This is rather conventional. The new idea of this tool is that these lists can be modified *on the fly*, i.e. during the runtime of the Python code.
 
 ![Engine as a set of states with a list of assignments and transitions](assets/Engine_Model.svg)
 
-The Python code can be seen as a sort of generator language: The code itself is used to assemble the internal data structure of the engine. The engine object itself provides functions like `engine.sync()` or `engine.jump_if()` that create a new state and a (possibly conditional) transition to this state. The python code is itself assumed to run single-threaded while the generated engine may exhibit parallel behavior. This simplifies the handling of parallel running sub-engines in the final code.
+The Python code can be seen as a sort of generator language: The code itself is used to assemble the internal data structure of the engine. The engine object itself provides functions like `engine.sync()` or `engine.jump_if()` that create a new state and a (possibly conditional) transition to this state. The Python code is itself assumed to run single-threaded while the generated engine may exhibit parallel behavior. This simplifies the handling of parallel running sub-engines in the final code.
 
 After this data structure has been assembled, it can be converted (i.e. rendered) into Verilog code or other representations.
 
@@ -37,6 +37,7 @@ The `CoreEngine` object serves as the central container for the entire state mac
 The main idea of the state management is, that the user *never* has to declare states manually. This is done under the hood of the `engine` class.
 
 #### Use Model
+
 In the user's code, the only functions used for state management are:
 
   - `engine.sync()`: Create a next state and (unconditionally) transition to it.
@@ -51,7 +52,8 @@ For conditional execution, the `engine.jump_if(some_condition, true_branch, fals
 Under the hood, these context managers use the afforementioned `jump_if` and deal internally with state mingling to keep this complexity away from the user.
 
 #### Internals
-The `engine.states` collection is not merely a list -- it's the *only* source of truth for all states. This design ensures that any modification (adding, removing, or changing states) is reflected consistently across all generated code. When a new state is added via `engine.add_state("NEW_STATE")`, the state immediately becomes available for transition definition and assignment configuration. This eliminates the need for manual synchronization across multiple files, which is a common source of errors in traditional RTL development.
+
+The `engine.states` collection is not merely a list -- it's the *only* source of truth for all states. This design ensures that any modification (adding, removing, or changing states) is reflected consistently across all generated code. When a new state is added via `engine.create_state("NEW_STATE")`, the state immediately becomes available for transition definition and assignment configuration. This eliminates the need for manual synchronization across multiple files, which is a common source of errors in traditional RTL development.
 
 #### Signal Management
 
@@ -71,7 +73,6 @@ For details about signal management, please find the special sections (once avai
 
 - **Instances**: ...
 
-
 ### States: Execution Units with Built-in Logic
 
 States in noRTL are not just named entities—they are full execution units with their own logic. Each `State` object contains:
@@ -82,16 +83,18 @@ States in noRTL are not just named entities—they are full execution units with
 
 
 ### Parallel Behavior with Workers and Threads
+
 ...
 
 ### Metadata for Objects
+
 ...
 
 ### The `Renderable` Concept
 
 The `Renderable` interface (not explicitly shown in the provided code but implied by the structure) is critical for the data model's flexibility. It allows different components (like signals, states, assignments) to be converted to their HDL representation consistently. For example, the `Signal` class implements a `render()` method that returns the appropriate Verilog representation.
 
-Along this way, constants are automatically combined on python level to make life of the synthesis flow easier. This is also used to clean out conditional transitions that are always on.
+Along this way, constants are automatically combined on Python level to make life of the synthesis flow easier. This can also be used to clean out conditional transitions that are never reached.
 
 This concept enables the system to handle complex expressions and signals uniformly, whether they're simple assignments or nested structures.
 
@@ -133,5 +136,5 @@ As the result of the operation is a Renderable object, it can be stored in a Pyt
 var = adr + 1
 
 # Use operation result as an function argument
-engine.set(OUT, (a + << 8) | b)
+engine.set(OUT, (a << 8) | b)
 ```

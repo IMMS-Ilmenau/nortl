@@ -12,7 +12,7 @@ A simulation test in noRTL has three parts, each living in its own method:
 
 There's also a fourth optional method:
 
-- **`verify_final_state()`** — runs *after* both the DUT and testbench have finished. Use it for post-simulation checks that can't be done inside the testbench (like reading error counters).
+- **`verify_final_state()`** — optional state sequence placed after the DUT and testbench threads in the generated FSM. It runs during simulation, not as Python after `vvp`. Use `self.assertTrue` / `self.assertEqual`.
 
 Let's walk through the first test: verifying that the traffic light cycles through its phases correctly.
 
@@ -45,6 +45,18 @@ class TestNormalCycle(NoRTLTestBase[Engine]):
         # both threads to finish. We create a local signal that the
         # testbench will assert when it's done verifying.
         self.stop_signal = engine.define_local("TEST_STOP", 1, 0)
+
+        # The DUT and the testbench are separate forks. A signal that one
+        # writes and the other reads raises NonIdenticalRWError unless this
+        # check is disabled. assertTrue wraps its condition in
+        # UnregisteredRead, so it does not need the same exception.
+        for signal in (
+            engine.emergency,
+            engine.ped_request,
+            engine.status,
+            self.stop_signal,
+        ):
+            signal.access_checker.disable_check("identical_rw")
         return engine
 
     def dut(self, engine: Engine) -> None:
@@ -79,9 +91,15 @@ class TestNormalCycle(NoRTLTestBase[Engine]):
         engine.sync()
         engine.wait_for(engine.status == 0b0010)
 
-        # Verify the yellow phase outputs.
-        self.assertTrue(engine.north_en == 1)
-        self.assertTrue(engine.south_en == 1)
+        # NS_YELLOW is an all-red gap, and it only lasts a few cycles.
+        # assertTrue() syncs, so four separate asserts would run past the
+        # phase and see the next one. Check every enable in one cycle.
+        self.assertTrue(
+            (engine.north_en == 0)
+            & (engine.south_en == 0)
+            & (engine.east_en == 0)
+            & (engine.west_en == 0)
+        )
 
         # We've verified enough for this test. Signal the DUT to stop
         # so both threads finish and the simulation ends cleanly.
@@ -103,7 +121,8 @@ A few things to note:
 Install the package in development mode and run pytest:
 
 ```bash
-uv pip install -e ".[test]"
+uv pip install -e .
+uv pip install pytest
 pytest tests/test_engine.py::TestNormalCycle -v
 ```
 
@@ -162,7 +181,7 @@ def setup_artifacts_dir():
 ```python
 # tests/test_artifacts.py (continued)
 
-def test_export_traffic_light_verilog(engine) -> None:
+def test_export_traffic_light_verilog() -> None:
     """Render the traffic light engine to Verilog and save as artifact.
 
     This is the core artifact generation test. It builds the engine,
@@ -276,15 +295,18 @@ Run it with `python generate.py`. This is useful for quick iteration, but rememb
 Your controller classes should manage signals via the engine but avoid holding mutable Python state that affects hardware behavior. The engine's state machine is the single source of truth. Python variables that change during execution don't map to hardware and can lead to confusing bugs.
 
 ```python
-# Good: signal-based state management
+# Good: signal-based state management.
 class PumpController:
-    def __init__(self, engine: Engine):
+    def __init__(self, engine: Engine, timer: Timer):
+        self.engine = engine
+        self.timer = timer
         self.pump_en = engine.define_local("PUMP_EN", 1, 0)
 
     def start(self, duration: int):
+        self.engine.sync()  # The reset value is already 0. Do not assign 1 in that same state.
         self.engine.set(self.pump_en, 1)
         self.engine.sync()
-        self.engine.timer.wait_delay(duration)
+        self.timer.wait_delay(duration)
         self.engine.set(self.pump_en, 0)
 ```
 
@@ -304,12 +326,12 @@ def compute_checksum(engine: EngineProto, data: Renderable) -> None:
 
 Follow the separation established in `NoRTLTestBase`. The DUT (`dut()`) describes the hardware; the testbench (`the_testbench()`) drives inputs and checks outputs. Mixing them makes tests harder to read and debug.
 
-| Method                 | Purpose                          |
-| ---------------------- | -------------------------------- |
-| `init_sequence()`      | Create and configure the engine  |
-| `dut()`                | The hardware design under test   |
-| `the_testbench()`      | Stimulus and verification logic  |
-| `verify_final_state()` | Post-simulation checks in Python |
+| Method                 | Purpose                                         |
+| ---------------------- | ----------------------------------------------- |
+| `init_sequence()`      | Create and configure the engine                 |
+| `dut()`                | The hardware design under test                  |
+| `the_testbench()`      | Stimulus and verification logic                 |
+| `verify_final_state()` | In-simulation checks after both threads finish  |
 
 ### 4. Parameterize Your Engine
 

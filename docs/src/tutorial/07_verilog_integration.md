@@ -18,9 +18,13 @@ module nortl_block_ram #(
     input  logic              WR_EN,
     input  logic [ADDR_WIDTH-1:0] ADDR_I,
     input  logic [DATA_WIDTH-1:0] WR_DATA_I,
-    output logic [DATA_WIDTH-1:0] RD_DATA_O
+    output logic [DATA_WIDTH-1:0] RD_DATA_O,
+    output logic              CLK_REQ
 );
     logic [DATA_WIDTH-1:0] ram [0:RAM_DEPTH-1];
+
+    // Kept high so the RAM stays clocked when the renderer enables clock gating.
+    assign CLK_REQ = 1'b1;
 
     // Synchronous write
     always_ff @(posedge CLK_I or posedge RST_ASYNC_I) begin
@@ -43,51 +47,42 @@ module nortl_block_ram #(
 endmodule
 ```
 
-## Adding the Module to NoRTL
+## Registering a Module for the Engine
 
-Before we can instantiate this module in Python, we need to register it with noRTL's library. This is done in `src/nortl/verilog_library/__init__.py`. We add the file path to the `BUILT_IN_LIB` dictionary and define the module's interface in the `get_modules()` function:
+By default, noRTL can only instantiate the built-in modules in `nortl.verilog_library.HDL_MODULES`. Custom modules must be registered using the `add_module()` method, before attempting to create an instance using `create_module_instance()`.
+
+Providing the source code for the module will allow the noRTL test wrapper to use the module during simulation.
+The example below registers a block RAM. The code is wrapped in a registration function for re-usability.
 
 ```python
-# src/nortl/verilog_library/__init__.py
-# ... existing imports ...
+from pathlib import Path
 
-BUILT_IN_LIB = {
-    # ... existing entries ...
-    'nortl_block_ram': (VERILOG_LIBRARY_DIR / 'nortl_block_ram.sv').resolve(),
-}
+from nortl.core.module import Module
+from nortl.core.protocols import EngineProto
 
-def get_modules() -> List[Module]:
-    module_list = []
-    # ... existing module parsing ...
-
-    hdl_ram = ''
-    with open(BUILT_IN_LIB['nortl_block_ram'], 'r') as file:
-        hdl_ram = file.read()
-
-    ram = Module('nortl_block_ram', hdl_ram)
+def register_block_ram(engine: EngineProto, hdl_path: Path) -> None:
+    """Register block RAM module on engine."""
+    ram = Module('nortl_block_ram', hdl_path.read_text())
     ram.add_port('WR_EN')
     ram.add_port('ADDR_I')
     ram.add_port('WR_DATA_I')
     ram.add_port('RD_DATA_O')
     ram.add_parameter('ADDR_WIDTH', 8)
     ram.add_parameter('DATA_WIDTH', 32)
+
+    # The renderer connects CLK_REQ only when to_verilog(clock_gating=True).
     ram.add_port('CLK_REQ')
     ram.set_clk_request('CLK_REQ')
-    module_list.append(ram)
-
-    return module_list
+    engine.add_module(ram)
 ```
-
-!!! note
-    It is recommended that you create your own `get_modules` function in your own package to collect all verilog components you need for your noRTL engine.
 
 ## Wrapping the Module in a Python Class
 
 We create a Python class that handles instantiation, parameter overriding, and port mapping. This class acts as a bridge between your sequential Python code and the synthesized Verilog logic.
 
 ```python
-# src/nortl/components/block_ram.py
 from typing import Union, List
+
 from nortl.core.protocols import EngineProto, Renderable
 
 class BlockRam:
@@ -99,6 +94,7 @@ class BlockRam:
         instance_name_prefix: str = 'I_RAM'
     ) -> None:
         self.engine = engine
+        self.data_width = data_width
 
         # The following block prevents name collisions
         ram_idx = 0
@@ -106,14 +102,16 @@ class BlockRam:
             ram_idx += 1
         self.instance_name = instance_name
 
+        # register_block_ram(engine, ...) must have run first.
         self.ram_module = self.engine.create_module_instance('nortl_block_ram', self.instance_name)
         self.engine.override_module_parameter(self.instance_name, 'ADDR_WIDTH', addr_width)
         self.engine.override_module_parameter(self.instance_name, 'DATA_WIDTH', data_width)
 
-        # Define internal signals for port mapping
-        self.wr_en = self.engine.define_local(f'{self.instance_name}_wr_en')
-        self.addr = self.engine.define_local(f'{self.instance_name}_addr', width=addr_width)
-        self.wr_data = self.engine.define_local(f'{self.instance_name}_wr_data', width=data_width)
+        # Inputs of the IP are locals with a reset value. The read-data
+        # output is a local without a reset value, so the FSM does not drive it.
+        self.wr_en = self.engine.define_local(f'{self.instance_name}_wr_en', reset_value=0)
+        self.addr = self.engine.define_local(f'{self.instance_name}_addr', width=addr_width, reset_value=0)
+        self.wr_data = self.engine.define_local(f'{self.instance_name}_wr_data', width=data_width, reset_value=0)
         self.rd_data = self.engine.define_local(f'{self.instance_name}_rd_data', width=data_width)
 
         # Connect Python signals to Verilog ports
@@ -144,13 +142,13 @@ For standard use cases, a `read` operation will schedule an address, wait for on
         self.engine.sync()
 
     def read(self, addr: Renderable) -> Renderable:
-        """Perform a synchronous read operation. Returns a scratchs signal representing the read data."""
-        ret = self.define_scratch(self.data_width)
+        """Perform a synchronous read operation. Returns a scratch signal representing the read data."""
+        ret = self.engine.define_scratch(self.data_width)
         self.engine.set(self.addr, addr)
         self.engine.set(self.wr_en, 0)
         self.engine.sync()
         # rd_data is now valid on the next cycle
-        self.engine.set(ret, rd_data)
+        self.engine.set(ret, self.rd_data)
         self.engine.sync()
         return ret
 ```
@@ -173,4 +171,4 @@ Sometimes you need to transfer multiple values efficiently without breaking your
         return results
 ```
 
-With this wrapper in place, you can now instantiate `BlockRam` in your engine, feed it addresses and data using `engine.set()`, and chain read/write operations alongside your other noRTL constructs. The resulting Verilog will automatically include your custom RAM module, correctly instantiated and connected to your control logic!
+With this wrapper in place, you can now register the module using `register_block_ram()`, instantiate `BlockRam` in your engine, feed it addresses and data using `engine.set()`, and chain read/write operations alongside your other noRTL constructs. The resulting Verilog will automatically include your custom RAM module, correctly instantiated and connected to your control logic!

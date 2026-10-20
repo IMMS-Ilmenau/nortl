@@ -32,8 +32,8 @@ For development work, install in editable mode:
 git clone https://github.com/IMMS-Ilmenau/nortl
 cd nortl
 
-# Install development dependencies
-uv sync --all-extras
+# Install package and development dependencies
+uv sync
 
 # Activate the virtual environment
 source .venv/bin/activate

@@ -55,7 +55,7 @@ class ComponentsMixin(CoreEngine):
         """
         return Channel(self, width, name=name)
 
-    def create_elastic_channel(self, width: int, name: str = 'channel') -> ElasticChannel:
+    def create_elastic_channel(self, width: int, name: str = 'channel', depth: int = 16) -> ElasticChannel:
         """Create an elastic channel.
 
         Example:
@@ -67,8 +67,9 @@ class ComponentsMixin(CoreEngine):
         Arguments:
             width: Bit width of the channel.
             name: Name of the channel instance.
+            depth: The depth of the FIFO buffer (must be 2**N, default: 16).
         """
-        return ElasticChannel(self, width, name=name)
+        return ElasticChannel(self, width, name=name, depth=depth)
 
     def create_timer(self, width: Union[int, ParameterProto] = 16, instance_name_prefix: str = 'I_TIMER', clock_gating: bool = False) -> Timer:
         """Create a timer.

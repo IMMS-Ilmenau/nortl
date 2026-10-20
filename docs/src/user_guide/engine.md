@@ -1,6 +1,5 @@
 ## Quick-Start Guide to Engine Class
 
-
 The Engine class in `engine.py` allows you to write state machines in a procedural way. This guide will walk you through the key methods and how to use them to create a state machine.
 
 ### Define Registers and Ports
@@ -14,12 +13,14 @@ Before defining states, you need to define the registers and ports that your sta
 Example:
 ```python
 engine = Engine('my_engine')
+
 input_signal = engine.define_input('input_signal')
 output_signal = engine.define_output('output_signal', reset_value=1)
 local_signal = engine.define_local('local_signal')
 ```
 
 ### Using your Engine
+
 After you constructed your engine and created ports and signals, you can start with creating the sequential behavior.
 Since an example is more illustrative than just function description, consider a fully automated coffee machine with the following (simplified) interface:
 
@@ -40,11 +41,9 @@ We want to realize the following processes:
 Now, we can create our hardware controller:
 
 ```python
-
-from nortl import engine
-from nortl.core.constructs import Condition
-from nortl.renderer.verilog_renderer import VerilogRenderer
+from nortl import Const, Engine
 from nortl.components import Timer
+from nortl.renderer import VerilogRenderer
 
 engine = Engine('my_engine')
 coffee = engine.define_input('REQUEST_COFFEE')
@@ -52,12 +51,12 @@ espresso = engine.define_input('REQUEST_ESPRESSO')
 grinder = engine.define_output('GRINDER_EN', reset_value=0)
 pump = engine.define_output('PUMP_EN', reset_value=0)
 heater = engine.define_output('HEATER_EN', reset_value=0)
-pressure = engine.define_output('GRINDER_EN', reset_value=0, width=4)
+pressure = engine.define_output('PRESSURE', reset_value=0, width=4)
 
 timer = Timer(engine)
 
 # we need to know our clock frequency to realize the delays
-fclk = 1e6
+fclk = int(1e6)
 ```
 
 After we created the engine, we are in reset state and can start by describing the behavior:
@@ -65,7 +64,7 @@ After we created the engine, we are in reset state and can start by describing t
 ```python
 # ...
 
-with Condition(coffee.rising()): # coffee.rising() automatically created the edge detector
+with engine.condition(coffee.rising()):  # coffee.rising() automatically created the edge detector
     # Grind Coffee
     engine.set(grinder, 1)
     timer.wait(fclk*2)
@@ -85,49 +84,64 @@ with Condition(coffee.rising()): # coffee.rising() automatically created the edg
     engine.set(pump, 0)
     engine.set(heater, 0)
 
-with Condition(espresso.rising()):
+with engine.condition(espresso.rising()):
     # similar procedure as above for brewing coffee
+    ...
 
 # Go back to reset state (once the devs created a while loop, this will look less nasty)
 engine.jump_if(Const(1), engine.reset_state)
 ```
 
-After we described our behavior, we can just write out the verilog code:
+After we described our behavior, we can just write out the Verilog code:
 ```python
+# ...
+
 renderer = VerilogRenderer(engine)
 with open('coffee_engine.sv', 'w') as file:
     file.write(renderer.render())
 ```
 
-
 ## Additional Information
 
 ### Naming States
 
-States are automatically created by the `sync()` and `wait_for()` methods. However, you can name the initial state using the `reset_state_name` parameter when creating the engine instance:
+States are automatically created by the `sync()` and `wait_for()` methods.
+They are automatically given a unique name following the scheme `STATE_<current_state_number` for the main worker or `<worker_name>_STATE_<current_state_number>` for all other workers.
+
+You can name the initial state using the `reset_state_name` parameter when creating the engine instance:
+
 ```python
 engine = Engine('my_engine', reset_state_name='IDLE')
 ```
-Alternatively, you can name the next state after calling `next_state`:
+
+You can name any other state, by setting its `name` attribute:
+
 ```python
-engine.next_state  # Create a new state
-engine.current_state = engine.next_state  # Set the current state to the new state
+engine.sync()  # Create a new state and switch to it
+engine.current_state.name = 'START_I2C'  # Set the name
 ```
-Note that states are automatically named by the engine if you don't provide a name.
+
+If you manually create states via `engine.create_state(name=None)`, you may directly provide a name:
+
+```python
+new_state = engine.create_state("FALLBACK_STATE")
+```
 
 ### Create Events
 
 Events are used to trigger transitions between states. You can create events using the following methods:
 
-* `rising(signal)`: Create a rising edge event on the given signal.
-* `falling(signal)`: Create a falling edge event on the given signal.
-* `delayed(signal, cycles=1)`: Create a delayed event on the given signal.
-* `synchronized(signal)`: Create a synchronized event on the given signal.
+* `signal.rising()`: Create a rising edge event on the given signal.
+* `signal.falling()`: Create a falling edge event on the given signal.
+* `signal.delayed(cycles=1)`: Create a delayed event on the given signal.
+* `signal.synchronized()`: Create a synchronized event on the given signal.
 
 Example:
+
 ```python
 event_signal = engine.rising(input_signal)
 ```
+
 You can use the created event signal as a condition for a transition.
 
 ### Transitions
@@ -139,6 +153,7 @@ Transitions are created using the following methods:
 * `jump_if(condition, true_state, false_state=None)`: Jump to the given state if the condition is met, otherwise stay in the current state.
 
 Example:
+
 ```python
 engine.set(output_signal, 1)  # Set output signal to 1
 engine.sync()  # Synchronize outputs and move to the next state
@@ -147,6 +162,7 @@ engine.wait_for(event_signal)  # Wait until the event signal is high
 engine.set(output_signal, 0)  # Set output signal to 0
 engine.sync()  # Synchronize outputs and move to the next state
 ```
+
 Note that you can use the `next_state` attribute to create a new state and set it as the current state.
 
 ## Additional Tips

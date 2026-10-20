@@ -11,7 +11,7 @@ When you call `engine.set(signal, value)`, you are **not** writing to the signal
 
 ## Types of Signals
 
-noRTL provides four distinct signal types, each mapped to specific Verilog constructs and managed by the `SignalManager`:
+noRTL provides four distinct signal types, each mapped to specific Verilog constructs.
 
 * `input`: External signals entering your module. These are read-only and cannot be assigned by your logic. Created via `engine.define_input(name, width)`.
 * `output`: Ports driven by your design. They can be implemented as registers (with an optional `reset_value`) or as continuous combinational assignments. Created via `engine.define_output(name, width, reset_value=0)`.
@@ -39,6 +39,8 @@ Create a scratch signal using `engine.define_scratch(width)`. This returns a `Sc
 
 Scratch signals follow a strict scoping and lifecycle model. This ensures resources are never leaked and prevents naming collisions.
 
-* **Automatic Allocation:** When you enter a new control context (like a loop or a conditional block), noRTL automatically activates a new memory zone. Any scratch signals created within this zone are allocated in the active scratch pad.
-* **Automatic Release:** When the context exits, the zone is deactivated, and all scratch signals allocated within it are automatically released. Their bit positions in the scratch pad become available for reuse.
-* **Safe Reuse:** Because signals are tied to their zone's lifecycle, you can safely create scratch signals with the same name or width in different branches of your code. noRTL ensures they don't interfere with each other by managing their lifetimes independently.
+* **Automatic Release:** When you enter a new control context (like a loop or a conditional block), noRTL starts a context counter, that increments for every context depth. When a context exits, all scratch signals allocated within it are automatically released. Their bit positions in the scratch pad become available for reuse.
+
+* **Safe Reuse:** Because signals are tied to their context, you can safely create scratch signals with the same name or width in different branches of your code. noRTL ensures they don't interfere with each other by managing their lifetimes independently.
+
+* **Memory Zoning:** If scratch signals are used with [Segments](./08_segments.md), they need to be safely re-used anywhere in the state machine, meaning their slice of the scratchpad signal must stay free. The scratch pad is there split into one or more **memory zones**. Each zone uses an independent local signal for allocation.

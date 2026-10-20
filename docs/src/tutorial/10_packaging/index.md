@@ -10,12 +10,12 @@ Before diving into the mechanics, it's worth understanding *why* packaging matte
 
 - **Reusability**: A packaged engine can be imported by other projects just like any Python library. You write the traffic light controller once, then use it in a robotics project, a simulation, or a production FPGA design.
 - **Testability**: Packaging forces you to separate your design from its test harness. This separation makes it easier to write focused tests and keeps your codebase maintainable.
-- **Synthesis integration**: When your tests pass, you need the generated Verilog for actual hardware. By tying Verilog export into your python test flow, you ensure the artifact always reflects the last-tested design. This will later allow for an integration in CI/CD flows.
+- **Synthesis integration**: When your tests pass, you need the generated Verilog for actual hardware. By tying Verilog export into your Python test flow, you ensure the artifact always reflects the last-tested design. This will later allow for an integration in CI/CD flows.
 - **Dependency clarity**: A `pyproject.toml` makes it explicit what your design depends on (nortl itself, any custom Verilog IP, simulation tools). This matters when handing a project to a colleague or deploying it on a CI server.
 
-This all seems pretty obvious for the average python programmer but actually improves the situation for hardware developers. In many HDLs such as Verilog, there is no common notion of packaging along with tests and a connection to CI/CD flows. noRTL inherits all this from Python.
+This all seems pretty obvious for the average Python programmer but actually improves the situation for hardware developers. In many HDLs such as Verilog, there is no common notion of packaging along with tests and a connection to CI/CD flows. noRTL inherits all this from Python.
 
-For creating python packages for noRTL-based hardware, you have to decide, if you want the python class itself to inherit from the noRTL Enging (it actually *is* an engine) or if you want to create a reuseable IP where the engine is passed along and kept within the module.
+For creating Python packages for noRTL-based hardware, you have to decide, if you want the Python class itself to inherit from the noRTL Engine (it actually *is* an engine) or if you want to create a reuseable IP where the engine is passed along and kept within the module.
 
 ## Project Structure
 

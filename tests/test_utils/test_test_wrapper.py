@@ -171,7 +171,7 @@ class TestTheTestWrapperWithValueCapture(NoRTLTestBase[Engine]):
             {'pair': [4, 42]},
             {'count': [5]},
             {'pair': [5, 42]},
-        ], captured_values
+        ]
 
     def verify_final_state(self, engine: Engine) -> None:
         self.assertTrue(engine.signals['counter'] == 5)

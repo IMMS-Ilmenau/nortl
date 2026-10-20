@@ -41,6 +41,7 @@ noRTL provides a `for_loop` context manager that emulates the behavior of a stan
 
 ```python
 out = engine.define_output("LOOP_COUNTER_OUT", 8)
+engine.sync()  # Move from reset
 
 with engine.for_loop(0, 10, 2) as i:
     engine.set(out, i)
@@ -67,10 +68,12 @@ Internally, noRTL automatically allocates a scratch register for the counter and
 The `while_loop` context manager emulates the behavior of a standard Python `while` loop while automatically generating the necessary state transitions for your hardware design.
 
 ```python
-out = engine.define_output("WHILE_COUNTER_OUT", 8)
+out = engine.define_output("WHILE_COUNTER_OUT", 8, 0)
+engine.sync()  # Move from reset
 
 with engine.while_loop(out < 4):
     engine.set(out, out + 1)
+    engine.sync()
 ```
 
 The context manager evaluates the provided `condition` at the beginning of each iteration. If the condition evaluates to true (logic-1), the engine proceeds into the loop body. Once the condition becomes false, the engine automatically transitions to the loop's exit state, ensuring deterministic control flow.

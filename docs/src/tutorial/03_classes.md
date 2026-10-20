@@ -28,28 +28,35 @@ noRTL's context managers and state transitions are tied to the active `Engine` i
 For example, let's encapsulate the heater control logic from our coffee machine into a reusable class:
 
 ```python
+from nortl import Engine, Timer
+
 class HeaterController:
-    def __init__(self, engine: Engine, heater_en: Signal):
+    def __init__(self, engine: Engine, heater_en, timer: Timer):
         self.engine = engine
         self.heater_en = heater_en
+        self.timer = timer
 
     def activate(self, duration_cycles: int):
         """Turn on the heater and wait for a specified duration."""
         self.engine.set(self.heater_en, 1)
         self.engine.sync()  # Ensure clean state transition
-        self.engine.timer.wait_delay(duration_cycles)
+        self.timer.wait_delay(duration_cycles)
         self.engine.set(self.heater_en, 0)
 ```
 
 Now, in your main script, you can instantiate and use this controller cleanly:
 
 ```python
+from nortl import Engine, Const, Timer
+
 engine = Engine("CoffeeMachineV2")
+start = engine.define_input("START", 1)
 heater_en = engine.define_output("HEATER_EN", 1, 0)
 timer = Timer(engine, 24)
+fclk = int(1e6)
 
 # Instantiate our reusable controller
-heater_ctrl = HeaterController(engine, heater_en)
+heater_ctrl = HeaterController(engine, heater_en, timer)
 
 with engine.while_loop(Const(True)):
     engine.wait_for(start.rising())

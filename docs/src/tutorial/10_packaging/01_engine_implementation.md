@@ -9,12 +9,9 @@ In this way, many constructs can be written in a nice way but it limits the reus
 
 The engine class is the heart of your package. It defines the interface (ports) and the behavior (state machine). Following the composition pattern from [../03_classes.md](../03_classes.md), the engine delegates subsystem logic to separate controller classes rather than implementing everything inline.
 
-```python
-# src/traffic_light/engine.py
-from nortl import Engine, Timer
-from nortl.core.operations import Const
+```python title="src/traffic_light/engine.py"
+from nortl import Engine, Const, Timer
 from nortl.core.protocols import Renderable
-from nortl.components.timer import Timer
 
 from .controllers import PedestrianController, EmergencyOverride
 
@@ -58,7 +55,8 @@ class TrafficLightEngine(Engine):
                 becomes true. This is useful for testing — the testbench
                 can assert a stop signal after verifying one cycle.
         """
-        condition = Const(False) if stop_signal is None else ~stop_signal
+        # Const(True) runs forever.
+        condition = Const(True) if stop_signal is None else ~stop_signal
         with self.while_loop(condition):
             # Check for emergency first
             self.emergency_ctrl.handle_emergency()
@@ -127,10 +125,8 @@ There are two ways to integrate controllers into your engine:
 1. **Inline integration** — call controller methods directly from `build()`. The controller's logic executes as part of the main state machine flow. This is the recommended approach for most cases.
 2. **Signal-based coordination** — the controller defines local signals that the engine reads to make decisions. Useful when a subsystem needs to communicate status back to the engine without tightly coupling their state machines.
 
-```python
-# src/traffic_light/controllers.py
+```python title="src/traffic_light/controllers.py"
 from nortl.core.protocols import EngineProto
-from nortl.core.constructs import Condition
 
 
 class PedestrianController:
@@ -154,7 +150,7 @@ class PedestrianController:
         with self.engine.condition(ped_request):
             self.engine.set(self.crossing_active, 1)
             self.engine.sync()
-            self.engine.timer.wait_delay(int(1e6))  # 1 second crossing
+            self.engine.timer.wait_delay(1 * self.engine.fclk)  # 1 second crossing
             self.engine.set(self.crossing_active, 0)
             self.engine.sync()
         with self.engine.else_condition():
@@ -208,8 +204,7 @@ This inline integration means controller methods execute as sequential state tra
 
 The package's `__init__.py` defines what users see when they import it:
 
-```python
-# src/traffic_light/__init__.py
+```python title="src/traffic_light/__init__.py"
 """Traffic light controller built with noRTL."""
 
 from .engine import TrafficLightEngine
@@ -229,57 +224,42 @@ The process has three steps: register the Verilog module with noRTL's library, w
 
 Before noRTL can render or compile your custom Verilog, it needs to know where the file lives and what ports and parameters the module exposes. You register this in `src/traffic_light/verilog_ip/__init__.py`:
 
-```python
-# src/traffic_light/verilog_ip/__init__.py
-"""Register custom Verilog IP modules with noRTL."""
+```python title="src/traffic_light/verilog_ip/__init__.py"
+"""Provides method to register custom Verilog IP module with noRTL."""
 
 from pathlib import Path
-from nortl.verilog_library import BUILT_IN_LIB
-from nortl.verilog_library.module import Module
+
+from nortl.core.module import Module
 
 VERILOG_IP_DIR = Path(__file__).parent
 
-# Map the module name to its source file
-BUILT_IN_LIB["my_counter"] = (VERILOG_IP_DIR / "counter.sv").resolve()
 
+def register_counter_module(engine: EngineProto) -> Module:
+    """Register my_counter module on engine."""
+    counter_hdl = (VERILOG_IP_DIR / "counter.sv").read_text()
+    cnt = Module("my_counter", counter_hdl)
+    cnt.add_port("LOAD")
+    cnt.add_port("DATA_I")
+    cnt.add_port("DATA_O")
+    cnt.add_port("DONE")
+    cnt.add_parameter("WIDTH", 8)
 
-def get_custom_modules():
-    """Return a list of custom Verilog modules for compilation.
-
-    This function is called by the test wrapper to collect all
-    Verilog source files before compilation. Extend it as you add
-    more modules.
-    """
-    modules = []
-
-    counter_file = VERILOG_IP_DIR / "counter.sv"
-    if counter_file.exists():
-        with open(counter_file, "r") as f:
-            counter_hdl = f.read()
-        cnt = Module("my_counter", counter_hdl)
-        cnt.add_port("CLK_I")
-        cnt.add_port("RST_ASYNC_I")
-        cnt.add_port("LOAD")
-        cnt.add_port("DATA_I")
-        cnt.add_port("DATA_O")
-        cnt.add_port("DONE")
-        cnt.add_parameter("WIDTH", 8)
-        modules.append(cnt)
-
-    return modules
+    # Register module on engine
+    engine.add_module(ram)
 ```
 
-This does two things: it tells noRTL where to find `counter.sv` when rendering Verilog, and it gives the renderer the port/parameter metadata it needs to generate correct instantiations. The `get_custom_modules()` function is used by your test wrapper during simulation compilation (see [02_testing_and_artifacts.md](02_testing_and_artifacts.md)).
+The function can be called on an engine instance, to register the counter module.
 
 ### Write a Python Wrapper Class
 
 Now that noRTL knows about the module, write a Python class that wraps it — just like the built-in `Timer` wraps `nortl_count_down_timer`. Create `src/traffic_light/ip/counter.py`:
 
-```python
-# src/traffic_light/ip/counter.py
+```python title="src/traffic_light/ip/counter.py"
 from typing import Union
 
 from nortl.core.protocols import EngineProto, ParameterProto, Renderable
+
+from traffic_light.verilog_ip import register_counter_module
 
 
 class Counter:
@@ -307,6 +287,10 @@ class Counter:
 
         self.instance_name = instance_name
 
+        # register counter module, if not already presesnt
+        if "my_counter" not in engine.modules:
+            register_counter_module(engine)
+
         # Create the Verilog instance and set its parameter
         self._module = engine.create_module_instance(
             "my_counter", self.instance_name
@@ -315,9 +299,11 @@ class Counter:
 
         # Define local signals and wire them to the module ports
         self.load = engine.define_local(f"{self.instance_name}_load", reset_value=0)
-        self.data_in = engine.define_local(f"{self.instance_name}_data_in", width=width)
+        self.data_in = engine.define_local(
+            f"{self.instance_name}_data_in", width=width, reset_value=0
+        )
         self.data_out = engine.define_local(f"{self.instance_name}_data_out", width=width)
-        self.done = engine.define_local(f"{self.instance_name}_done", reset_value=0)
+        self.done = engine.define_local(f"{self.instance_name}_done")
 
         engine.connect_module_port(self.instance_name, "LOAD", self.load)
         engine.connect_module_port(self.instance_name, "DATA_I", self.data_in)
@@ -352,8 +338,7 @@ A few things worth noting:
 
 With the module registered and the wrapper written, using it in your engine is straightforward:
 
-```python
-# src/traffic_light/engine.py (excerpt)
+```python title="src/traffic_light/engine.py (excerpt)"
 from .ip.counter import Counter
 
 class TrafficLightEngine(Engine):

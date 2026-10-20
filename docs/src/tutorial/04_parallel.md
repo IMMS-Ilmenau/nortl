@@ -12,6 +12,7 @@ from nortl.components.channel import Channel
 
 engine = Engine("ParallelDemo")
 out = engine.define_output("RESULT", 16)
+engine.sync()  # Leave reset before fork(). Starting a worker assigns its start bit, which reset already drives.
 
 # Spawn a parallel thread
 with engine.fork("data_processor") as proc_thread:
@@ -28,11 +29,11 @@ engine.set(out, 1)
 
 The `join()` method blocks the main thread until the spawned thread completes. Threads can also be explicitly finished or cancelled:
 
-* `thread.join()`: Waits until the thread's worker returns to its idle state. Automatically releases scratch signals and frees signal access rights.
-* `thread.cancel()`: Sends a synchronous reset to the thread's worker, forcibly stopping it and recursively cancelling any child threads.
-* `thread.finish()`: Explicitly terminates the thread's current execution path.
+* `thread.join()`: Waits until that thread's worker returns to its idle state, then releases that thread's scratch signals and frees its access rights. It does not join or cancel child threads. Join each child yourself.
+* `thread.cancel()`: Sends a synchronous reset to the thread's worker and recursively cancels every thread spawned from it, then releases scratch signals and frees access rights.
+* `thread.finish()`: Jumps that worker back to its idle state. It does not release scratch signals and it does not free access rights. If the body of a `fork()` does not already leave the worker, the context manager calls `finish()` for you when the block ends.
 
-noRTL supports nested fork/join structures. In this case, it will allocate the necessary workers automatically. Also the `cancel()` and `join()` functions will handle the interaction with child threads of the currently running thread.
+noRTL supports nested fork/join structures and allocates workers as needed. Only `cancel()` walks child threads. `join()` waits on the worker you call it on.
 
 ## Access Checks & Signal Ownership
 
@@ -51,12 +52,13 @@ Manually managing signal ownership would be tedious. Instead, noRTL automaticall
 
 When you **start a new thread** with `engine.fork()`, noRTL automatically releases the signal access rights of the spawning thread. This tells the engine: *"The main thread is done with these signals for now; the new thread has ownership."* This prevents false-positive race condition errors during the parallel execution phase.
 
-Conversely, when a thread **ends** (via `thread.join()` or `thread.finish()`), noRTL automatically frees its access rights. This allows the main thread (or other waiting threads) to safely read or write those signals again.
+Conversely, when you `join()` or `cancel()` a thread, noRTL frees its access rights. This allows the main thread (or other waiting threads) to safely read or write those signals again. `finish()` does not do this. After `finish()`, another thread that touches the same signal still raises `ExclusiveReadError`, `ExclusiveWriteError`, or `NonIdenticalRWError`.
 
 Here's how it looks in practice:
 
 ```python
 shared_data = engine.define_local("SHARED_DATA", 16)
+engine.sync()  # Leave reset
 
 with engine.fork("processor") as worker:
     # Ownership automatically transfers to 'worker'
@@ -95,14 +97,19 @@ Alternatively, you can disable checks on a per-signal basis if you are managing 
 
 ## Using `Volatile`
 
-For signals that are intentionally shared across multiple threads or workers, noRTL provides the `Volatile` wrapper. Wrapping a signal with `Volatile` tells the access checker to relax its strict ownership rules for that specific instance. You can specify the desired access policy during initialization:
+For signals that are intentionally shared across multiple threads or workers, noRTL provides the `Volatile` wrapper. Wrapping a signal with `Volatile` tells the access checker to relax its strict ownership rules for that specific instance. You can specify the desired access policies to ignore during initialization:
 
 ```python
 from nortl import Volatile
 
-# Create a signal that allows shared read/write access across threads
-shared_reg = Volatile(
-    engine.define_local("SHARED_REG", 8, reset_value=0)
+# Allow one writer and multiple readers (ignores "exclusive_read", "identical_rw")
+shared_reg = Volatile(engine.define_local("SHARED_REG", 8, reset_value=0))
+
+# Allow multiple writers, one reader
+shared_writers = Volatile(
+    engine.define_local("SHARED_WRITERS", 8, reset_value=0),
+    "exclusive_write",
+    "identical_rw",
 )
 ```
 

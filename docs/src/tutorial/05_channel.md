@@ -9,6 +9,7 @@ Passing data between parallel threads is a common requirement. noRTL provides tw
 
 ```python
 data_channel = engine.create_channel(width=16, name='sensor_data')
+engine.sync()  # Leave reset before fork().
 
 with engine.fork("sensor_reader") as reader:
     # ... read sensor values ...
@@ -22,18 +23,21 @@ engine.set(out, received_val)
 ## Using an Elastic Channel (FIFO)
 
 ```python
+# Create elastic channel with depth 8. The depth must be 2**N.
 fifo_channel = engine.create_elastic_channel(width=16, name='fifo_data', depth=8)
+engine.sync()  # Leave reset before fork().
 
 with engine.fork("batch_processor") as batcher:
-    # Can push multiple items without waiting for the main thread
-    # The FIFO buffers them automatically
-    fifo_channel.send_multiple([100, 101, 102])
+    # send_multiple stores the list last-element-first (MSB first).
+    # This list is received as 100, then 101, then 102.
+    fifo_channel.send_multiple([102, 101, 100])
 
-# Main thread consumes items one by one when ready
+# Main thread consumes items one by one when ready.
+# receive() blocks until the FIFO level is non-zero.
 item = fifo_channel.receive()
 engine.set(out, item)
 ```
 
 !!! warning
 
-    Both channel types are **blocking** by design. `send()` and `receive()` will advance the state machine and wait until the handshake completes. If you need non-blocking behavior, you'll need to implement conditional checks (`engine.wait_for()`) around the channel calls or build a custom state machine that polls the channel status.
+    Both channel types are **blocking** by design, but they do not block on the same condition. `Channel.send` and `Channel.receive` wait until the ready/valid handshake completes. `ElasticChannel.send` waits until `level < depth - 2`, and `ElasticChannel.receive` waits until `level != 0`. Neither call has a non-blocking mode. Poll `Channel.ready`, `Channel.valid`, or `ElasticChannel.level` yourself.

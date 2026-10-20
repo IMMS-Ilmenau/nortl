@@ -6,12 +6,12 @@ As your designs grow, manually checking Verilog output is no longer feasible. no
 
 To get started, you create a test class that inherits from `NoRTLTestBase`. This base class handles all the heavy lifting: it sets up parallel execution threads, manages timeouts, and runs the simulation pipeline automatically.
 
-Your test class must implement four key methods:
+Your test class must implement two methods. Two more are optional and default to doing nothing:
 
-1.  **`init_sequence()`**: Initializes and configures your engine. This is where you define ports, local signals, and any custom parameters.
-2.  **`dut(engine)`**: The state sequence describing the hardware you want to test. This runs in parallel to your testbench.
-3.  **`the_testbench(engine)`**: The state sequence that acts as your stimulus. This runs in parallel to the DUT and drives inputs to verify behavior.
-4.  **`verify_final_state(engine)`** *(optional)*: Called after the simulation ends. You can use this to check final signal values or perform cleanup.
+1.  **`init_sequence()`** *(required)*: Initializes and configures your engine. This is where you define ports, local signals, and any custom parameters. The engine must be named `"my_engine"`.
+2.  **`dut(engine)`** *(required)*: The state sequence describing the hardware you want to test. This runs in parallel to your testbench.
+3.  **`the_testbench(engine)`** *(optional)*: The state sequence that acts as your stimulus. This runs in parallel to the DUT and drives inputs to verify behavior.
+4.  **`verify_final_state(engine)`** *(optional)*: Another state sequence, emitted while the engine is being built and run during simulation after the DUT and testbench threads have finished, before the pass/fail flag is set. Use `self.assertTrue` and `self.assertEqual` here.
 
 ## Parallel Execution and Timeout
 
@@ -62,7 +62,9 @@ noRTL provides hardware-aware assertions that run *inside* the simulation. They 
 *   `self.assertTrue(condition)`: Checks if the condition is true. If false, it prints the failing line of code and increments an error counter.
 *   `self.assertEqual(value1, value2)`: Checks if two values are equal. On failure, it prints both values for easy debugging.
 
-If any assertion fails, the error counter increments, and the simulation marks the test as failed. You can access the final error count via `self.engine.signals['error_ctr']` if needed.
+Both assertions end with `sync()`, so each one costs a clock cycle of the testbench thread.
+
+If any assertion fails, the hardware error counter increments, and the simulation drives the `passed` flag to `0`. Pytest then fails the test. You can access the error count from within the testbench via `self.engine.signals['error_ctr']` if needed.
 
 ## Value Capture
 
@@ -100,12 +102,12 @@ def callback_after_simulation(self, engine: Engine, captured_values: list) -> No
         {'pair': [4, 42]},
         {'count': [5]},
         {'pair': [5, 42]},
-    ], captured_values
+    ]
 ```
 
 Note that `captured_values` contains plain Python data, not engine signals — use regular Python `assert` statements here, not `self.assertTrue`/`self.assertEqual` (which render Verilog assertions for in-simulation checks).
 
-The parsed data is also available as `self.captured_values`, if you need it in `verify_final_state` or elsewhere. The raw JSONL file (`self.value_capture_file`) only exists while the simulation run is active.
+The parsed data is also available as `self.captured_values`, if you need it in `callback_after_execution()`. The raw JSONL file (`self.value_capture_file`) only exists while the simulation run is active.
 
 ## Example Test
 
@@ -117,7 +119,7 @@ from nortl.utils.test_wrapper import NoRTLTestBase
 
 class MyEngineTest(NoRTLTestBase[Engine]):
     def init_sequence(self) -> Engine:
-        engine = Engine("test_engine")
+        engine = Engine("my_engine")  # (1)!
 
         # Define internal signals
         self.testreg = engine.define_local("testreg", 4, 0)
@@ -145,6 +147,8 @@ class MyEngineTest(NoRTLTestBase[Engine]):
         # Alternative: use assertEqual
         self.assertEqual(self.testreg, 5)
 ```
+
+1. The engine must always be named "my_engine" or else, an `RuntimeError` is thrown.
 
 ## Running the Tests
 
