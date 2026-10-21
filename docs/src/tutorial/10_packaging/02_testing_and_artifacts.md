@@ -1,6 +1,6 @@
 # Testing and Artifacts
 
-Now we verify that the engine works correctly. Following [../06_pytest.md](../06_pytest.md), we use `NoRTLTestBase` to create tests that compile and simulate the generated Verilog.
+Now we verify that the engine works correctly. Following [Pytest](../06_pytest.md), we use `NoRTLTestBase` to create tests that compile and simulate the generated Verilog.
 
 ## Writing Simulation Tests
 
@@ -20,8 +20,7 @@ Let's walk through the first test: verifying that the traffic light cycles throu
 
 This is the simplest and most important test — it checks that the engine transitions through NS_GREEN, NS_YELLOW, EW_GREEN, and EW_YELLOW in the right order.
 
-```python
-# tests/test_engine.py
+```python title="tests/test_engine.py"
 """Tests for the traffic light engine using NoRTLTestBase."""
 
 from nortl.utils.test_wrapper import NoRTLTestBase
@@ -146,8 +145,7 @@ Here's the key insight: **you can generate these artifacts as part of your test 
 
 This test is fundamentally different from the simulation tests. It doesn't compile or run Verilog — it only renders the engine and writes the output to a file:
 
-```python
-# tests/test_artifacts.py
+```python title="tests/test_artifacts.py"
 """Generate Verilog artifacts for synthesis flows.
 
 This test does not run any simulation. It renders the engine to
@@ -178,8 +176,7 @@ def setup_artifacts_dir():
     yield
 ```
 
-```python
-# tests/test_artifacts.py (continued)
+```python title="tests/test_artifacts.py (continued)"
 
 def test_export_traffic_light_verilog() -> None:
     """Render the traffic light engine to Verilog and save as artifact.
@@ -224,8 +221,7 @@ Once you have the artifact files, you can feed them into any synthesis flow. The
 
 Add this fixture to `tests/conftest.py`:
 
-```python
-# tests/conftest.py
+```python tests="tests/conftest.py"
 import subprocess
 from pathlib import Path
 
@@ -271,8 +267,7 @@ The artifacts directory can grow quickly, especially with parametric generation.
 
 While the artifact test is the recommended approach, you may occasionally need to generate Verilog outside of pytest — for example, during interactive development or as part of a manual build process. A simple script suffices:
 
-```python
-# generate.py
+```python test="generate.py"
 from traffic_light import TrafficLightEngine
 from nortl.renderer.verilog_renderer import VerilogRenderer
 

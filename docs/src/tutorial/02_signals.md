@@ -43,4 +43,4 @@ Scratch signals follow a strict scoping and lifecycle model. This ensures resour
 
 * **Safe Reuse:** Because signals are tied to their context, you can safely create scratch signals with the same name or width in different branches of your code. noRTL ensures they don't interfere with each other by managing their lifetimes independently.
 
-* **Memory Zoning:** If scratch signals are used with [Segments](./08_segments.md), they need to be safely re-used anywhere in the state machine, meaning their slice of the scratchpad signal must stay free. The scratch pad is there split into one or more **memory zones**. Each zone uses an independent local signal for allocation.
+* **Memory Zoning:** If scratch signals are used with [Segments](./08_segments.md), they need to be safely re-used anywhere in the state machine, meaning their slice of the scratchpad signal must stay free. The scratch pad is therefore split into one or more **memory zones**. Each zone uses an independent local signal for allocation.

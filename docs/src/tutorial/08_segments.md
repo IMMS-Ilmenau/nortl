@@ -10,7 +10,9 @@ In hardware description, every step in your Python code typically maps to a stat
 * **Improve Readability:** Break complex logic into modular, reusable functions that mirror standard software practices.
 * **Manage Memory Efficiently:** Automatically handle temporary signals and memory zones for intermediate calculations using scratch managers.
 
-> **Note:** Reuse applies to calls with the *same* arguments on the *same* worker. A `fork()` runs on another worker, so the same arguments there render a second segment. To share a single state sequence across *different* input values, use [Input Slots](#input-and-output-slots).
+!!! note
+
+    Reuse applies to calls with the *same* arguments on the *same* worker. A `fork()` runs on another worker, so the same arguments there render a second segment. To share a single state sequence across *different* input values, use [Input Slots](#input-and-output-slots).
 
 ## How to use Segments
 

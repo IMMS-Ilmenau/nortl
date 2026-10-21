@@ -6,8 +6,7 @@ While noRTL provides powerful high-level constructs for sequential design, you w
 
 First, we need our target hardware description. Here is a simple synchronous Block RAM with a pipeline register for reads and clock-gating support:
 
-```systemverilog
-// hdl/generated/nortl/nortl_block_ram.sv
+```systemverilog title="hdl/nortl_block_ram.sv"
 module nortl_block_ram #(
     parameter ADDR_WIDTH = 8,
     parameter DATA_WIDTH = 32,
