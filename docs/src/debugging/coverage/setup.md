@@ -34,7 +34,7 @@ Call the `monitor_state_coverage()` and `monitor_transition_coverage()` methods 
     If you want to enable coverage monitoring inside the [noRTL test wrapper](../../tutorial/06_pytest.md), do so in the `callback_before_rendering()` method.
 
     ```python hl_lines="4 5"
-    class MyTest(NoRTLTestBase[Engine]):
+    class TestClass(NoRTLTestBase[Engine]):
         # ...
         def callback_before_rendering(self, engine: Engine) -> Engine:
             engine.coverage.monitor_state_coverage()
@@ -232,7 +232,7 @@ If multiple noRTL engines are used in a design, there will be one file per engin
     The test wrapper will automatically set the path to the coverage file in `self.coverage_file`.
 
     ```python hl_lines="4 7 8"
-    class MyTest(NoRTLTestBase[Engine]):
+    class TestClass(NoRTLTestBase[Engine]):
         # ...
         def callback_after_execution(self, engine: Engine) -> None:
             engine.coverage.annotate(self.coverage_file)

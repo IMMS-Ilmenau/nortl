@@ -38,7 +38,7 @@ The values are always written as a list, so a single-value capture is recorded a
 When using the [noRTL test wrapper](../../tutorial/06_pytest.md), the value capture file is parsed automatically after the simulation. Override the `callback_after_simulation()` method to verify the captured values:
 
 ```python hl_lines="4 5 6"
-class MyTest(NoRTLTestBase[Engine]):
+class TestClass(NoRTLTestBase[Engine]):
     # ...
     def callback_after_simulation(self, engine: Engine, captured_values: list) -> None:
         # One dict per engine.capture() call, in emission order

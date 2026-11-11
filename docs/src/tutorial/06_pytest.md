@@ -117,9 +117,9 @@ Here is a complete example demonstrating a test that drives a channel and verifi
 from nortl import Engine
 from nortl.utils.test_wrapper import NoRTLTestBase
 
-class MyEngineTest(NoRTLTestBase[Engine]):
+class TestMyEngine(NoRTLTestBase[Engine]):  # (1)!
     def init_sequence(self) -> Engine:
-        engine = Engine("my_engine")  # (1)!
+        engine = Engine("my_engine")  # (2)!
 
         # Define internal signals
         self.testreg = engine.define_local("testreg", 4, 0)
@@ -148,7 +148,8 @@ class MyEngineTest(NoRTLTestBase[Engine]):
         self.assertEqual(self.testreg, 5)
 ```
 
-1. The engine must always be named "my_engine" or else, an `RuntimeError` is thrown.
+1. The test class must start with `Test` to be found by the native pytest discovery rules.
+2. The engine must always be named "my_engine" or else, an `RuntimeError` is thrown.
 
 ## Running the Tests
 
